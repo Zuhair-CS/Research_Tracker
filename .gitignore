@@ -1,0 +1,19 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+
+# SECURITY: real secrets live only in .env files, which are never committed.
+# Only .env.example (placeholders, no real values) is tracked.
+.env
+.env.*
+!.env.example
+
+# Prisma generated client (rebuilt by `prisma generate`)
+apps/api/src/generated/
+
+# Test / scan output
+playwright-report/
+test-results/
+reports/

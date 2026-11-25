@@ -1,0 +1,193 @@
+// PB-1 Publication Tracker - database schema
+//
+// SECURITY: all database access goes through Prisma, which always sends
+// values as query *parameters* (never pasted into the SQL text). That is what
+// prevents SQL injection. The codebase does not use $queryRawUnsafe at all.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  RESEARCHER
+  VIEWER
+}
+
+enum ResearcherType {
+  FACULTY
+  STUDENT
+}
+
+enum PublicationType {
+  JOURNAL_ARTICLE
+  CONFERENCE_PAPER
+  BOOK
+  BOOK_CHAPTER
+  THESIS
+  PREPRINT
+  OTHER
+}
+
+enum PublicationSource {
+  MANUAL
+  CROSSREF
+  ORCID
+  OPENALEX
+}
+
+model Department {
+  id           String        @id @default(uuid()) @db.Uuid
+  code         String        @unique
+  name         String        @unique
+  users        User[]
+  publications Publication[]
+}
+
+model User {
+  id                    String          @id @default(uuid()) @db.Uuid
+  email                 String          @unique
+  name                  String
+  // SECURITY: only the argon2id hash is stored, never the password itself.
+  passwordHash          String
+  role                  Role            @default(VIEWER)
+  researcherType        ResearcherType?
+  departmentId          String?         @db.Uuid
+  department            Department?     @relation(fields: [departmentId], references: [id])
+  orcidId               String?         @unique
+  // OpenAlex author profile the researcher confirmed as theirs (via an approved claim request).
+  openalexAuthorId      String?         @unique
+  // Set when someone signs up and asks for Faculty/Student access. They stay a
+  // read-only VIEWER until an admin approves (self-signup can never grant powers by itself).
+  pendingResearcherType ResearcherType?
+  // Disabled accounts cannot log in (we keep them so the audit trail still makes sense).
+  active                Boolean         @default(true)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  publications          Publication[]
+  auditLogs             AuditLog[]
+  notifications         Notification[]
+  claimsReceived        ClaimRequest[]  @relation("ClaimResearcher")
+  claimsSent            ClaimRequest[]  @relation("ClaimRequester")
+}
+
+enum ClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// An admin asks a registered researcher: "is this OpenAlex profile / are these papers yours?"
+// Nothing is added to the researcher's account until THEY approve (consent).
+model ClaimRequest {
+  id                String      @id @default(uuid()) @db.Uuid
+  researcherId      String      @db.Uuid
+  researcher        User        @relation("ClaimResearcher", fields: [researcherId], references: [id])
+  requestedById     String      @db.Uuid
+  requestedBy       User        @relation("ClaimRequester", fields: [requestedById], references: [id])
+  openalexAuthorId  String?
+  authorName        String
+  authorInstitution String?
+  message           String?
+  // Snapshot of the papers being offered (title, year, DOI, ...), so the researcher
+  // reviews exactly what the admin saw. Re-fetched from the source on approval.
+  works             Json
+  status            ClaimStatus @default(PENDING)
+  responseNote      String?
+  importedCount     Int         @default(0)
+  createdAt         DateTime    @default(now())
+  respondedAt       DateTime?
+
+  @@index([researcherId, status])
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String // CLAIM_REQUEST, CLAIM_APPROVED, CLAIM_REJECTED, SIGNUP_PENDING, ACCESS_APPROVED, ACCESS_REJECTED
+  message   String
+  link      String? // in-app path, e.g. /claims/<id>
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+model Publication {
+  id           String              @id @default(uuid()) @db.Uuid
+  title        String
+  venue        String? // journal or conference name
+  year         Int
+  doi          String?
+  type         PublicationType
+  pdfUrl       String?
+  source       PublicationSource   @default(MANUAL)
+  orcidPutCode String? // ORCID's id for the work, so re-imports do not create duplicates
+  openalexId   String? // OpenAlex work id (e.g. W2741809807), same purpose
+  departmentId String              @db.Uuid
+  department   Department          @relation(fields: [departmentId], references: [id])
+  ownerId      String              @db.Uuid
+  owner        User                @relation(fields: [ownerId], references: [id])
+  authors      PublicationAuthor[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  // The same researcher cannot add the same DOI twice (co-authors each keep their own copy).
+  @@unique([ownerId, doi])
+  @@unique([ownerId, orcidPutCode])
+  @@unique([ownerId, openalexId])
+  @@index([year])
+  @@index([type])
+  @@index([departmentId])
+}
+
+model PublicationAuthor {
+  id            String      @id @default(uuid()) @db.Uuid
+  publicationId String      @db.Uuid
+  publication   Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  name          String
+  position      Int
+
+  @@index([publicationId])
+  @@index([name])
+}
+
+// Append-only record of who did what and when. The API never updates or
+// deletes rows in this table (there is no route for it).
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String // e.g. PUBLICATION_CREATE, LOGIN_FAILED
+  entityType String // e.g. Publication, User, Session
+  entityId   String?
+  before     Json?
+  after      Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId])
+  @@index([entityType, entityId])
+}
+
+// Server-side session store used by connect-pg-simple. Keeping sessions in
+// the database (instead of a JWT in the browser) means a logout or account
+// disable takes effect immediately.
+model Session {
+  sid    String   @id @db.VarChar
+  sess   Json
+  expire DateTime @db.Timestamp(6)
+
+  @@index([expire], map: "IDX_session_expire")
+  @@map("session")
+}

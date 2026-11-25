@@ -1,0 +1,38 @@
+{
+  "name": "pb1-pubtrack",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PB-1: University Research Publication Tracking System with a secure DevSecOps CI/CD pipeline",
+  "license": "MIT",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev:api": "npm run dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
+    "db:up": "docker compose up -d db",
+    "db:migrate": "npm run db:migrate -w apps/api",
+    "db:seed": "npm run db:seed -w apps/api",
+    "build": "npm run build -w apps/api && npm run build -w apps/web",
+    "start": "npm run start -w apps/api",
+    "lint": "eslint .",
+    "typecheck": "npm run typecheck --workspaces"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.65.1",
+    "eslint": "10.15.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.14.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.73.0"
+  },
+  "//overrides": "SECURITY: force patched versions of vulnerable transitive dependencies. effect<=3.22.0 has a ReDoS bug (GHSA-7589-6fvf-x4pw); it is pulled in by the Prisma CLI.",
+  "overrides": {
+    "effect": "3.22.5"
+  }
+}
