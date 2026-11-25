@@ -4,6 +4,7 @@ import { api, errorMessage } from '../../api/client';
 import { useAuth } from '../../auth/AuthContext';
 import { useAsync, useDepartments } from '../../hooks';
 import type { ExternalAuthor, ScholarlyWork, User } from '../../types';
+import { AlertCircleIcon, InfoIcon } from '../Icons';
 
 interface Props {
   /** The works currently ticked. */
@@ -81,8 +82,10 @@ export function SelectionActions({ selected, author, alsoAuthorIds = [], profile
   if (!isAdmin) {
     const dept = departmentId || user.department?.id || '';
     return (
-      <div className="card action-bar">
-        <span className="muted small grow-text">Import the ticked papers into <strong>your</strong> account. Only import papers you co-authored.</span>
+      <div className={`card action-bar${selected.length > 0 ? ' has-selection' : ''}`}>
+        <span className="muted small grow-text">
+          Import the ticked papers into <strong>your</strong> account. Only import papers you co-authored.
+        </span>
         <label className="inline-label">
           Department
           <select value={dept} onChange={(e) => setDepartmentId(e.target.value)}>
@@ -114,7 +117,12 @@ export function SelectionActions({ selected, author, alsoAuthorIds = [], profile
         >
           Import selected ({selected.length})
         </button>
-        {status && <p className={`alert ${status.kind} full`}>{status.text}</p>}
+        {status && (
+          <p className={`alert ${status.kind} full`}>
+            {status.kind === 'error' ? <AlertCircleIcon size={16} /> : <InfoIcon size={16} />}
+            <span>{status.text}</span>
+          </p>
+        )}
       </div>
     );
   }
@@ -136,13 +144,17 @@ export function SelectionActions({ selected, author, alsoAuthorIds = [], profile
         },
       });
       const name = researchers?.find((r) => r.id === researcherId)?.name ?? 'the researcher';
-      setStatus({ kind: 'info', text: `Request sent to ${name} with ${claim.works.length} paper(s). They will be notified to approve it.`, link: `/claims/${claim.id}` });
+      setStatus({
+        kind: 'info',
+        text: `Request sent to ${name} with ${claim.works.length} paper(s). They will be notified to approve it.`,
+        link: `/claims/${claim.id}`,
+      });
       setMessage('');
       onDone();
     });
 
   return (
-    <div className="card action-bar">
+    <div className={`card action-bar${selected.length > 0 ? ' has-selection' : ''}`}>
       <label className="inline-label">
         Send to researcher
         <select value={researcherId} onChange={(e) => setResearcherId(e.target.value)}>
@@ -188,7 +200,10 @@ export function SelectionActions({ selected, author, alsoAuthorIds = [], profile
       </p>
       {status && (
         <p className={`alert ${status.kind} full`}>
-          {status.text} {status.link && <Link to={status.link}>View request</Link>}
+          {status.kind === 'error' ? <AlertCircleIcon size={16} /> : <InfoIcon size={16} />}
+          <span>
+            {status.text} {status.link && <Link to={status.link}>View request</Link>}
+          </span>
         </p>
       )}
     </div>

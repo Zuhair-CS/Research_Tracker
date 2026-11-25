@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, errorMessage } from '../../api/client';
 import type { ExternalAuthor, PeopleResult } from '../../types';
+import { AlertCircleIcon, CheckIcon, SearchIcon } from '../Icons';
 import { Pager } from './Pager';
 
 interface Props {
@@ -80,21 +81,25 @@ export function PeopleSearch({ institution, onOpen }: Props) {
         </label>
         <div className="filter-buttons">
           <button className="btn primary" type="submit">
-            Search
+            <SearchIcon size={15} />
+            <span>Search</span>
           </button>
         </div>
       </form>
 
       {error && (
         <p className="alert error" role="alert">
-          {error}
+          <AlertCircleIcon size={16} />
+          <span>{error}</span>
         </p>
       )}
 
       <div className="card table-card">
-        <p className="muted small">
-          {loading ? 'Searching…' : result ? `${fmt(result.total)} researcher(s)` : 'Type a name to search.'}
-        </p>
+        <div className="table-meta-bar">
+          <p className="muted small">
+            {loading ? 'Searching…' : result ? `${fmt(result.total)} researcher(s)` : 'Type a name to search.'}
+          </p>
+        </div>
         {result && result.authors.length > 0 && (
           <div className="table-scroll">
             <table>
@@ -113,16 +118,25 @@ export function PeopleSearch({ institution, onOpen }: Props) {
                   <tr key={a.id}>
                     <td>
                       <span className="pub-title">{a.name}</span>
-                      {a.linkedUser && <span className="tag tag-ok">Confirmed: {a.linkedUser.name}</span>}
+                      {a.linkedUser && (
+                        <span className="tag tag-ok">
+                          <CheckIcon size={11} />
+                          <span>Confirmed: {a.linkedUser.name}</span>
+                        </span>
+                      )}
                     </td>
-                    <td>{a.institutions.join('; ') || '—'}</td>
-                    <td className="nowrap">{a.orcidId ?? '—'}</td>
+                    <td>{a.institutions.join('; ') || <span className="muted">—</span>}</td>
+                    <td className="nowrap">
+                      {a.orcidId ? <span className="tag tag-mono">{a.orcidId}</span> : <span className="muted">—</span>}
+                    </td>
                     <td className="num">{fmt(a.worksCount)}</td>
                     <td className="num">{fmt(a.citedByCount)}</td>
                     <td>
-                      <button className="btn small" type="button" onClick={() => onOpen(a)}>
-                        View papers
-                      </button>
+                      <div className="row-actions">
+                        <button className="btn small" type="button" onClick={() => onOpen(a)}>
+                          View papers
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

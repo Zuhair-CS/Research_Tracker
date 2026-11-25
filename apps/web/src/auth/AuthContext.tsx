@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router';
 import { ApiError, api, setCsrfToken } from '../api/client';
+import { LoadingState } from '../components/LoadingState';
 import type { Role, User } from '../types';
 
 interface AuthState {
@@ -89,13 +90,13 @@ export function useAuth(): AuthState {
 export function RequireAuth({ roles, children }: { roles?: Role[]; children: ReactNode }) {
   const { user, loading } = useAuth();
   const location = useLocation();
-  if (loading) return <p className="muted pad">Loading…</p>;
+  if (loading) return <LoadingState />;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   if (roles && !roles.includes(user.role)) {
     return (
-      <div className="card">
+      <div className="card empty-card">
         <h1>Access denied</h1>
-        <p>Your role ({user.role.toLowerCase()}) cannot open this page.</p>
+        <p className="muted">Your role ({user.role.toLowerCase()}) cannot open this page.</p>
       </div>
     );
   }

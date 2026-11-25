@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { AlertCircleIcon, InfoIcon } from '../components/Icons';
 import { useAsync } from '../hooks';
 import type { Claim, ClaimStatus } from '../types';
 
@@ -15,7 +16,15 @@ export function ClaimsPage() {
   return (
     <section>
       <div className="page-head">
-        <h1>{isAdmin ? 'Claim requests' : 'Requests for me'}</h1>
+        <div className="page-title-group">
+          <span className="eyebrow">Authorship Verification</span>
+          <h1>{isAdmin ? 'Claim requests' : 'Requests for me'}</h1>
+          <p className="page-subtitle">
+            {isAdmin
+              ? 'Track publication verification requests sent to researchers.'
+              : 'Review and approve publications matched to your name before they are added.'}
+          </p>
+        </div>
         <label className="inline-label">
           Status
           <select value={status} onChange={(e) => setStatus(e.target.value as ClaimStatus | '')}>
@@ -27,14 +36,27 @@ export function ClaimsPage() {
           </select>
         </label>
       </div>
+
       {isAdmin && (
-        <p className="muted small">
-          Send a request from <Link to="/find">Find research</Link>: open a person's papers and choose “Send to researcher”.
+        <p className="info-strip">
+          <InfoIcon size={15} />
+          <span>
+            Send a request from <Link to="/find">Find research</Link>: open a person's papers and choose “Send to researcher”.
+          </span>
         </p>
       )}
-      {error && <p className="alert error">{error}</p>}
+
+      {error && (
+        <p className="alert error" role="alert">
+          <AlertCircleIcon size={16} />
+          <span>{error}</span>
+        </p>
+      )}
+
       <div className="card table-card">
-        <p className="muted small">{loading ? 'Loading…' : `${data?.items.length ?? 0} request(s)`}</p>
+        <div className="table-meta-bar">
+          <p className="muted small">{loading ? 'Loading…' : `${data?.items.length ?? 0} request(s)`}</p>
+        </div>
         <div className="table-scroll">
           <table>
             <thead>
@@ -58,7 +80,8 @@ export function ClaimsPage() {
                   </td>
                   {isAdmin ? (
                     <td>
-                      {c.researcher.name} <span className="muted small">({c.researcher.department?.code ?? '—'})</span>
+                      {c.researcher.name}{' '}
+                      <span className="tag tag-mono">{c.researcher.department?.code ?? '—'}</span>
                     </td>
                   ) : (
                     <td>{c.requestedBy.name}</td>
@@ -68,12 +91,21 @@ export function ClaimsPage() {
                   </td>
                   <td className="num">{c.status === 'APPROVED' ? c.importedCount : '—'}</td>
                   <td>
-                    <Link className="btn small" to={`/claims/${c.id}`}>
-                      {!isAdmin && c.status === 'PENDING' ? 'Review' : 'Open'}
-                    </Link>
+                    <div className="row-actions">
+                      <Link className={`btn small${!isAdmin && c.status === 'PENDING' ? ' primary' : ''}`} to={`/claims/${c.id}`}>
+                        {!isAdmin && c.status === 'PENDING' ? 'Review' : 'Open'}
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
+              {data && data.items.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="empty-state">
+                    No claim requests found.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

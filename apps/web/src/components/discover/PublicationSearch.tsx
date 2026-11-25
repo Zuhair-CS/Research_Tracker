@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, errorMessage } from '../../api/client';
 import { workKey, type PublicationResults } from '../../types';
+import { AlertCircleIcon, InfoIcon, SearchIcon } from '../Icons';
 import { Pager } from './Pager';
 import { SelectionActions } from './SelectionActions';
 import { EMPTY_WORK_FILTERS, WorkFilters, filterQuery, type WorkFilterValues } from './WorkFilters';
@@ -95,7 +96,8 @@ export function PublicationSearch({ institution }: { institution: string | null 
         </label>
         <div className="filter-buttons">
           <button className="btn primary" type="submit">
-            Search
+            <SearchIcon size={15} />
+            <span>Search</span>
           </button>
         </div>
       </form>
@@ -110,12 +112,14 @@ export function PublicationSearch({ institution }: { institution: string | null 
 
       {error && (
         <p className="alert error" role="alert">
-          {error}
+          <AlertCircleIcon size={16} />
+          <span>{error}</span>
         </p>
       )}
       {data?.warnings.map((w) => (
         <p key={w} className="alert info">
-          {w}
+          <InfoIcon size={16} />
+          <span>{w}</span>
         </p>
       ))}
 

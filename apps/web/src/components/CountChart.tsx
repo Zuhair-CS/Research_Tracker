@@ -12,6 +12,7 @@ function useChartTokens() {
       axis: v('--text-muted'),
       text: v('--text-secondary'),
       surface: v('--surface-2'),
+      border: v('--border'),
       cursor: v('--hover'),
     };
   };
@@ -20,7 +21,12 @@ function useChartTokens() {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const update = () => setTokens(read());
     mq.addEventListener('change', update);
-    return () => mq.removeEventListener('change', update);
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => {
+      mq.removeEventListener('change', update);
+      observer.disconnect();
+    };
   }, []);
   return tokens;
 }
@@ -41,62 +47,85 @@ export function CountChart({ title, data, orientation, labelHeader }: Props) {
   const t = useChartTokens();
   const [asTable, setAsTable] = useState(false);
   const horizontal = orientation === 'horizontal';
-  const height = horizontal ? Math.max(180, data.length * 34 + 40) : 260;
+  const height = horizontal ? Math.max(190, data.length * 36 + 44) : 270;
   const tick = { fill: t.axis, fontSize: 12 };
 
   return (
     <figure className="card chart-card">
       <figcaption className="chart-head">
         <h2>{title}</h2>
-        <button className="btn small ghost" type="button" onClick={() => setAsTable((v) => !v)} aria-pressed={asTable}>
-          {asTable ? 'Chart' : 'Table'}
-        </button>
+        <div className="segmented-mini" role="group" aria-label={`Display mode for ${title}`}>
+          <button
+            className={`seg-btn${!asTable ? ' active' : ''}`}
+            type="button"
+            onClick={() => setAsTable(false)}
+            aria-pressed={!asTable}
+          >
+            Chart
+          </button>
+          <button
+            className={`seg-btn${asTable ? ' active' : ''}`}
+            type="button"
+            onClick={() => setAsTable(true)}
+            aria-pressed={asTable}
+          >
+            Table
+          </button>
+        </div>
       </figcaption>
 
       {data.length === 0 ? (
-        <p className="muted">No data yet.</p>
+        <p className="muted empty-inline">No data yet.</p>
       ) : asTable ? (
-        <table className="compact">
-          <thead>
-            <tr>
-              <th>{labelHeader}</th>
-              <th className="num">Publications</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((d) => (
-              <tr key={d.label}>
-                <td>{d.label}</td>
-                <td className="num">{d.count}</td>
+        <div className="table-scroll chart-table-wrap">
+          <table className="compact">
+            <thead>
+              <tr>
+                <th>{labelHeader}</th>
+                <th className="num">Publications</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.map((d) => (
+                <tr key={d.label}>
+                  <td>{d.label}</td>
+                  <td className="num">{d.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
-        <div style={{ height }}>
+        <div className="chart-canvas" style={{ height }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={data}
               layout={horizontal ? 'vertical' : 'horizontal'}
-              margin={{ top: 8, right: 16, bottom: 4, left: 4 }}
-              barCategoryGap={horizontal ? 6 : 4}
+              margin={{ top: 10, right: 18, bottom: 6, left: 6 }}
+              barCategoryGap={horizontal ? 8 : 6}
             >
-              <CartesianGrid stroke={t.grid} vertical={horizontal} horizontal={!horizontal} />
+              <CartesianGrid stroke={t.grid} strokeDasharray="3 3" vertical={horizontal} horizontal={!horizontal} />
               {horizontal ? (
                 <>
                   <XAxis type="number" allowDecimals={false} tick={tick} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="label" width={170} tick={{ ...tick, fill: t.text }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="label" width={176} tick={{ ...tick, fill: t.text }} axisLine={false} tickLine={false} />
                 </>
               ) : (
                 <>
                   <XAxis dataKey="label" tick={tick} axisLine={{ stroke: t.grid }} tickLine={false} />
-                  <YAxis allowDecimals={false} tick={tick} axisLine={false} tickLine={false} width={32} />
+                  <YAxis allowDecimals={false} tick={tick} axisLine={false} tickLine={false} width={34} />
                 </>
               )}
               <Tooltip
                 cursor={{ fill: t.cursor }}
-                contentStyle={{ background: t.surface, border: `1px solid ${t.grid}`, borderRadius: 6, fontSize: 13 }}
-                labelStyle={{ color: t.text, fontWeight: 600 }}
+                contentStyle={{
+                  background: t.surface,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: 10,
+                  fontSize: 13,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                }}
+                labelStyle={{ color: t.text, fontWeight: 600, marginBottom: 2 }}
                 itemStyle={{ color: t.text }}
                 formatter={(value) => [value, 'Publications']}
               />
@@ -104,8 +133,8 @@ export function CountChart({ title, data, orientation, labelHeader }: Props) {
                 dataKey="count"
                 name="Publications"
                 fill={t.series}
-                maxBarSize={horizontal ? 18 : 28}
-                radius={horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]}
+                maxBarSize={horizontal ? 20 : 32}
+                radius={horizontal ? [0, 5, 5, 0] : [5, 5, 0, 0]}
                 isAnimationActive={false}
               />
             </BarChart>

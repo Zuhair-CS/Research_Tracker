@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { api, errorMessage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { AlertCircleIcon, InfoIcon, PlusCircleIcon } from '../components/Icons';
 import { useAsync, useDepartments } from '../hooks';
 import type { Role, User } from '../types';
 
@@ -25,7 +26,10 @@ export function UsersPage() {
     setMessage(null);
     try {
       await api(`/admin/users/${u.id}/access`, { method: 'POST', body: { decision } });
-      setMessage({ kind: 'info', text: decision === 'approve' ? `Approved ${u.name} as ${u.pendingResearcherType?.toLowerCase()}.` : `Rejected ${u.name}'s request.` });
+      setMessage({
+        kind: 'info',
+        text: decision === 'approve' ? `Approved ${u.name} as ${u.pendingResearcherType?.toLowerCase()}.` : `Rejected ${u.name}'s request.`,
+      });
       reload();
     } catch (err) {
       setMessage({ kind: 'error', text: errorMessage(err) });
@@ -63,11 +67,17 @@ export function UsersPage() {
   return (
     <section>
       <div className="page-head">
-        <h1>Users</h1>
+        <div className="page-title-group">
+          <span className="eyebrow">Administration</span>
+          <h1>Users</h1>
+          <p className="page-subtitle">Approve researcher onboarding requests, create accounts, and manage roles.</p>
+        </div>
       </div>
+
       {(error || message) && (
         <p className={`alert ${message?.kind ?? 'error'}`} role="alert">
-          {error ?? message?.text}
+          {message?.kind === 'info' ? <InfoIcon size={16} /> : <AlertCircleIcon size={16} />}
+          <span>{error ?? message?.text}</span>
         </p>
       )}
 
@@ -77,6 +87,7 @@ export function UsersPage() {
             <span className="small">
               <strong>Access requests</strong> <span className="muted">· people who signed up and asked for researcher access</span>
             </span>
+            <span className="tag tag-warn">{pending.length} pending</span>
           </div>
           <div className="table-scroll">
             <table>
@@ -93,18 +104,22 @@ export function UsersPage() {
               <tbody>
                 {pending.map((u) => (
                   <tr key={u.id}>
-                    <td>{u.name}</td>
+                    <td className="pub-title">{u.name}</td>
                     <td>{u.email}</td>
-                    <td>{u.pendingResearcherType?.toLowerCase()}</td>
-                    <td>{u.department?.code ?? '—'}</td>
+                    <td>
+                      <span className="tag tag-warn">{u.pendingResearcherType?.toLowerCase()}</span>
+                    </td>
+                    <td>{u.department?.code ? <span className="tag tag-mono">{u.department.code}</span> : '—'}</td>
                     <td className="nowrap">{new Date(u.createdAt).toLocaleDateString()}</td>
-                    <td className="row-actions">
-                      <button className="btn small primary" type="button" onClick={() => void decideAccess(u, 'approve')}>
-                        Approve
-                      </button>
-                      <button className="btn small danger" type="button" onClick={() => void decideAccess(u, 'reject')}>
-                        Reject
-                      </button>
+                    <td>
+                      <div className="row-actions">
+                        <button className="btn small primary" type="button" onClick={() => void decideAccess(u, 'approve')}>
+                          Approve
+                        </button>
+                        <button className="btn small danger" type="button" onClick={() => void decideAccess(u, 'reject')}>
+                          Reject
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -114,55 +129,64 @@ export function UsersPage() {
         </div>
       )}
 
-      <form className="card filters" onSubmit={(e) => void onCreate(e)} aria-label="Create user">
-        <label>
-          Name
-          <input name="name" required maxLength={200} />
-        </label>
-        <label>
-          E-mail
-          <input name="email" type="email" required maxLength={254} />
-        </label>
-        <label>
-          Initial password
-          <input name="password" type="password" required minLength={12} maxLength={128} autoComplete="new-password" />
-        </label>
-        <label>
-          Role
-          <select name="role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            <option value="RESEARCHER">Researcher</option>
-            <option value="VIEWER">Viewer</option>
-            <option value="ADMIN">Admin</option>
-          </select>
-        </label>
-        {role === 'RESEARCHER' && (
+      <div className="card">
+        <div className="card-head">
+          <h2>Create user</h2>
+        </div>
+        <form className="filters" onSubmit={(e) => void onCreate(e)} aria-label="Create user">
           <label>
-            Researcher type
-            <select name="researcherType" defaultValue="FACULTY">
-              <option value="FACULTY">Faculty</option>
-              <option value="STUDENT">Student</option>
+            Name
+            <input name="name" required maxLength={200} />
+          </label>
+          <label>
+            E-mail
+            <input name="email" type="email" required maxLength={254} />
+          </label>
+          <label>
+            Initial password
+            <input name="password" type="password" required minLength={12} maxLength={128} autoComplete="new-password" />
+          </label>
+          <label>
+            Role
+            <select name="role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+              <option value="RESEARCHER">Researcher</option>
+              <option value="VIEWER">Viewer</option>
+              <option value="ADMIN">Admin</option>
             </select>
           </label>
-        )}
-        <label>
-          Department
-          <select name="departmentId" defaultValue="">
-            <option value="">—</option>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="filter-buttons">
-          <button className="btn primary" type="submit">
-            Create user
-          </button>
-        </div>
-      </form>
+          {role === 'RESEARCHER' && (
+            <label>
+              Researcher type
+              <select name="researcherType" defaultValue="FACULTY">
+                <option value="FACULTY">Faculty</option>
+                <option value="STUDENT">Student</option>
+              </select>
+            </label>
+          )}
+          <label>
+            Department
+            <select name="departmentId" defaultValue="">
+              <option value="">—</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="filter-buttons">
+            <button className="btn primary" type="submit">
+              <PlusCircleIcon size={15} />
+              <span>Create user</span>
+            </button>
+          </div>
+        </form>
+      </div>
 
       <div className="card table-card">
+        <div className="table-meta-bar">
+          <p className="muted small">{data ? `${data.items.length} user(s)` : 'Loading…'}</p>
+        </div>
         <div className="table-scroll">
           <table>
             <thead>
@@ -180,8 +204,8 @@ export function UsersPage() {
               {data?.items.map((u) => (
                 <tr key={u.id} className={u.active ? '' : 'inactive'}>
                   <td>
-                    {u.name}
-                    {u.researcherType && <span className="muted small"> · {u.researcherType.toLowerCase()}</span>}
+                    <span className="pub-title">{u.name}</span>
+                    {u.researcherType && <span className="muted small">{u.researcherType.toLowerCase()}</span>}
                   </td>
                   <td>{u.email}</td>
                   <td>
@@ -196,15 +220,19 @@ export function UsersPage() {
                       <option value="VIEWER">Viewer</option>
                     </select>
                   </td>
-                  <td>{u.department?.code ?? '—'}</td>
-                  <td>{u.orcidId ?? '—'}</td>
-                  <td>{u.active ? 'Active' : 'Disabled'}</td>
+                  <td>{u.department?.code ? <span className="tag tag-mono">{u.department.code}</span> : '—'}</td>
+                  <td className="mono">{u.orcidId ?? '—'}</td>
                   <td>
-                    {u.id !== me?.id && (
-                      <button className={`btn small ${u.active ? 'danger' : ''}`} type="button" onClick={() => void update(u, { active: !u.active })}>
-                        {u.active ? 'Disable' : 'Enable'}
-                      </button>
-                    )}
+                    <span className={`status-dot ${u.active ? 'is-active' : 'is-inactive'}`}>{u.active ? 'Active' : 'Disabled'}</span>
+                  </td>
+                  <td>
+                    <div className="row-actions">
+                      {u.id !== me?.id && (
+                        <button className={`btn small ${u.active ? 'danger' : ''}`} type="button" onClick={() => void update(u, { active: !u.active })}>
+                          {u.active ? 'Disable' : 'Enable'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

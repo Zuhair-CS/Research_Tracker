@@ -1,5 +1,7 @@
 import { Link } from 'react-router';
 import { api } from '../api/client';
+import { AlertCircleIcon, CheckIcon } from '../components/Icons';
+import { LoadingState } from '../components/LoadingState';
 import { notifyUnreadChanged } from '../components/NotificationBell';
 import { useAsync } from '../hooks';
 import type { AppNotification } from '../types';
@@ -21,17 +23,27 @@ export function NotificationsPage() {
   return (
     <section className="narrow-page">
       <div className="page-head">
-        <h1>Notifications</h1>
+        <div className="page-title-group">
+          <span className="eyebrow">Inbox</span>
+          <h1>Notifications</h1>
+          <p className="page-subtitle">Updates on claim requests, researcher access approvals, and system notices.</p>
+        </div>
         {data && data.unread > 0 && (
           <button className="btn" type="button" onClick={() => void markAll()}>
-            Mark all as read
+            <CheckIcon size={15} />
+            <span>Mark all as read</span>
           </button>
         )}
       </div>
-      {error && <p className="alert error">{error}</p>}
+      {error && (
+        <p className="alert error" role="alert">
+          <AlertCircleIcon size={16} />
+          <span>{error}</span>
+        </p>
+      )}
       <div className="card table-card">
-        {loading && !data && <p className="muted pad">Loading…</p>}
-        {data && data.items.length === 0 && <p className="muted pad">You have no notifications.</p>}
+        {loading && !data && <LoadingState />}
+        {data && data.items.length === 0 && <p className="muted empty-state">You have no notifications.</p>}
         <ul className="notice-list">
           {data?.items.map((n) => (
             <li key={n.id} className={n.readAt ? '' : 'unread'}>

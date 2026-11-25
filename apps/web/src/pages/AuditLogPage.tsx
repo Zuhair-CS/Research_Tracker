@@ -1,5 +1,6 @@
 import { Fragment, useState, type FormEvent } from 'react';
 import { api } from '../api/client';
+import { AlertCircleIcon, ChevronLeftIcon, ChevronRightIcon } from '../components/Icons';
 import { useAsync } from '../hooks';
 import type { AuditEntry, Page } from '../types';
 
@@ -78,8 +79,13 @@ export function AuditLogPage() {
   return (
     <section>
       <div className="page-head">
-        <h1>Audit log</h1>
+        <div className="page-title-group">
+          <span className="eyebrow">Security &amp; Compliance</span>
+          <h1>Audit log</h1>
+          <p className="page-subtitle">Immutable record of authentication, data modifications, imports, and report exports.</p>
+        </div>
       </div>
+
       <form className="card filters" onSubmit={onFilter}>
         <label>
           Action
@@ -114,13 +120,18 @@ export function AuditLogPage() {
           </button>
         </div>
       </form>
+
       {error && (
         <p className="alert error" role="alert">
-          {error}
+          <AlertCircleIcon size={16} />
+          <span>{error}</span>
         </p>
       )}
+
       <div className="card table-card">
-        <p className="muted small">{loading ? 'Loading…' : `${data?.total ?? 0} event(s)`}</p>
+        <div className="table-meta-bar">
+          <p className="muted small">{loading ? 'Loading…' : `${data?.total ?? 0} event(s)`}</p>
+        </div>
         <div className="table-scroll">
           <table>
             <thead>
@@ -138,14 +149,18 @@ export function AuditLogPage() {
               {data?.items.map((e) => (
                 <Fragment key={e.id}>
                   <tr>
-                    <td className="nowrap">{new Date(e.createdAt).toLocaleString()}</td>
+                    <td className="nowrap mono">{new Date(e.createdAt).toLocaleString()}</td>
                     <td>{e.actor ? `${e.actor.name} (${e.actor.email})` : <span className="muted">anonymous</span>}</td>
                     <td>
-                      <span className={`tag ${e.action.endsWith('FAILED') || e.action.endsWith('DELETE') ? 'tag-warn' : ''}`}>{e.action}</span>
+                      <span
+                        className={`tag tag-mono ${e.action.endsWith('FAILED') || e.action.endsWith('DELETE') ? 'tag-warn' : ''}`}
+                      >
+                        {e.action}
+                      </span>
                     </td>
                     <td>{e.entityType}</td>
                     <td>{summarise(e)}</td>
-                    <td className="nowrap">{e.ip ?? '—'}</td>
+                    <td className="nowrap mono">{e.ip ?? '—'}</td>
                     <td>
                       {(e.before !== null || e.after !== null) && (
                         <button className="btn small ghost" type="button" onClick={() => setOpen(open === e.id ? null : e.id)}>
@@ -158,11 +173,11 @@ export function AuditLogPage() {
                     <tr key={`${e.id}-detail`} className="detail-row">
                       <td colSpan={7}>
                         <div className="diff">
-                          <div>
+                          <div className="diff-pane">
                             <strong>Before</strong>
                             <pre>{JSON.stringify(e.before, null, 2) ?? '—'}</pre>
                           </div>
-                          <div>
+                          <div className="diff-pane">
                             <strong>After</strong>
                             <pre>{JSON.stringify(e.after, null, 2) ?? '—'}</pre>
                           </div>
@@ -172,20 +187,31 @@ export function AuditLogPage() {
                   )}
                 </Fragment>
               ))}
+              {data && data.items.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="empty-state">
+                    No audit events match these filters.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
         {totalPages > 1 && (
           <div className="pager">
-            <button className="btn small" type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-              Previous
-            </button>
             <span className="muted small">
               Page {page} of {totalPages}
             </span>
-            <button className="btn small" type="button" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
-              Next
-            </button>
+            <div className="pager-controls">
+              <button className="btn small" type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                <ChevronLeftIcon size={14} />
+                <span>Previous</span>
+              </button>
+              <button className="btn small" type="button" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+                <span>Next</span>
+                <ChevronRightIcon size={14} />
+              </button>
+            </div>
           </div>
         )}
       </div>

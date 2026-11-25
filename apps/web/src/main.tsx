@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { AuthProvider, RequireAuth } from './auth/AuthContext';
 import { Layout } from './components/Layout';
+import { LoadingState } from './components/LoadingState';
 import { AccountPage } from './pages/AccountPage';
 import { AuditLogPage } from './pages/AuditLogPage';
 import { ClaimPage } from './pages/ClaimPage';
@@ -38,10 +39,27 @@ createRoot(document.getElementById('root') as HTMLElement).render(
             <Route path="/claims/:id" element={<RequireAuth roles={['ADMIN', 'RESEARCHER']}><ClaimPage /></RequireAuth>} />
             <Route path="/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
             <Route path="/account" element={<RequireAuth><AccountPage /></RequireAuth>} />
-            <Route path="/admin" element={<RequireAuth roles={['ADMIN']}><Suspense fallback={<p className="muted">Loading…</p>}><DashboardPage /></Suspense></RequireAuth>} />
+            <Route
+              path="/admin"
+              element={
+                <RequireAuth roles={['ADMIN']}>
+                  <Suspense fallback={<LoadingState />}>
+                    <DashboardPage />
+                  </Suspense>
+                </RequireAuth>
+              }
+            />
             <Route path="/admin/users" element={<RequireAuth roles={['ADMIN']}><UsersPage /></RequireAuth>} />
             <Route path="/admin/audit" element={<RequireAuth roles={['ADMIN']}><AuditLogPage /></RequireAuth>} />
-            <Route path="*" element={<div className="card"><h1>Page not found</h1></div>} />
+            <Route
+              path="*"
+              element={
+                <div className="card empty-card">
+                  <h1>Page not found</h1>
+                  <p className="muted">The page you requested does not exist.</p>
+                </div>
+              }
+            />
           </Route>
         </Routes>
       </AuthProvider>

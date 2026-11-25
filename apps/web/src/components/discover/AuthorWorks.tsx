@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api, errorMessage } from '../../api/client';
+import { initialsOf } from '../../lib/format';
 import { workKey, type ExternalAuthor, type RelatedProfile, type ResearcherWorks } from '../../types';
+import { AlertCircleIcon, ArrowLeftIcon, CheckIcon, InfoIcon } from '../Icons';
 import { Pager } from './Pager';
 import { SelectionActions } from './SelectionActions';
 import { EMPTY_WORK_FILTERS, WorkFilters, filterQuery, type WorkFilterValues } from './WorkFilters';
@@ -99,19 +101,33 @@ export function AuthorWorks({ author, onBack }: { author: ExternalAuthor; onBack
   const profile = data?.author ?? author;
   const includedProfiles = (related ?? []).filter((p) => included.includes(p.id));
   const profileWorksCount = profile.worksCount + includedProfiles.reduce((n, p) => n + p.worksCount, 0);
+
   return (
     <>
       <div className="card author-head">
-        <div>
-          <h2>{profile.name}</h2>
-          <p className="muted small">
-            {profile.institutions.join('; ') || 'No institution on record'}
-            {profile.orcidId && ` · ORCID ${profile.orcidId}`} · {fmt(profile.worksCount)} publications · {fmt(profile.citedByCount)} citations
-          </p>
-          {data?.linkedUser && <p className="small">Confirmed as the profile of <strong>{data.linkedUser.name}</strong>.</p>}
+        <div className="author-identity">
+          <div className="author-avatar" aria-hidden="true">
+            {initialsOf(profile.name, 'R')}
+          </div>
+          <div>
+            <h2>{profile.name}</h2>
+            <p className="muted small">{profile.institutions.join('; ') || 'No institution on record'}</p>
+            <div className="author-stats">
+              <span className="tag tag-accent">{fmt(profile.worksCount)} publications</span>
+              <span className="tag">{fmt(profile.citedByCount)} citations</span>
+              {profile.orcidId && <span className="tag tag-mono">ORCID {profile.orcidId}</span>}
+              {data?.linkedUser && (
+                <span className="tag tag-ok">
+                  <CheckIcon size={11} />
+                  <span>Confirmed: {data.linkedUser.name}</span>
+                </span>
+              )}
+            </div>
+          </div>
         </div>
         <button className="btn ghost" type="button" onClick={onBack}>
-          ← Back to people
+          <ArrowLeftIcon size={15} />
+          <span>Back to people</span>
         </button>
       </div>
 
@@ -120,8 +136,8 @@ export function AuthorWorks({ author, onBack }: { author: ExternalAuthor; onBack
           <p className="small">
             <strong>Other profiles that may be this person</strong>{' '}
             <span className="muted">
-              · OpenAlex sometimes splits one researcher into several profiles (different spellings, or a change of
-              institution). Tick the ones that are the same person to add their papers to the list.
+              · OpenAlex sometimes splits one researcher into several profiles (different spellings, or a change of institution). Tick the ones that
+              are the same person to add their papers to the list.
             </span>
           </p>
           <ul>
@@ -165,12 +181,14 @@ export function AuthorWorks({ author, onBack }: { author: ExternalAuthor; onBack
 
       {error && (
         <p className="alert error" role="alert">
-          {error}
+          <AlertCircleIcon size={16} />
+          <span>{error}</span>
         </p>
       )}
       {data?.warnings.map((w) => (
         <p key={w} className="alert info">
-          {w}
+          <InfoIcon size={16} />
+          <span>{w}</span>
         </p>
       ))}
 
@@ -232,8 +250,8 @@ export function AuthorWorks({ author, onBack }: { author: ExternalAuthor; onBack
             <span className="small">
               <strong>Possible matches (not confirmed)</strong>{' '}
               <span className="muted">
-                · {data.possibleMatches.length} paper(s) under the same name where the institution could not be checked.
-                They may belong to someone else with the same name: open each one and tick only papers you are sure about.
+                · {data.possibleMatches.length} paper(s) under the same name where the institution could not be checked. They may belong to someone
+                else with the same name: open each one and tick only papers you are sure about.
               </span>
             </span>
           </div>

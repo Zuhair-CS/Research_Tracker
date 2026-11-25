@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { api, errorMessage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { AlertCircleIcon, ArrowLeftIcon, InfoIcon, SparklesIcon } from '../components/Icons';
 import { useDepartments } from '../hooks';
 import { PUBLICATION_TYPES, type Publication, type PublicationDraft, type PublicationType } from '../types';
 
@@ -131,42 +132,58 @@ export function PublicationFormPage() {
   return (
     <section className="narrow-page">
       <div className="page-head">
-        <h1>{isEdit ? 'Edit publication' : 'Add publication'}</h1>
+        <div className="page-title-group">
+          <span className="eyebrow">Publication Record</span>
+          <h1>{isEdit ? 'Edit publication' : 'Add publication'}</h1>
+          <p className="page-subtitle">Enter bibliographic metadata manually or auto-fill via DOI from Crossref.</p>
+        </div>
+        <Link className="btn ghost" to="/">
+          <ArrowLeftIcon size={15} />
+          <span>Back to publications</span>
+        </Link>
       </div>
       <form className="card form" onSubmit={(e) => void onSubmit(e)}>
         {error && (
           <p className="alert error" role="alert">
-            {error}
+            <AlertCircleIcon size={16} />
+            <span>{error}</span>
           </p>
         )}
         {notice && (
           <p className="alert info" role="status">
-            {notice}
+            <InfoIcon size={16} />
+            <span>{notice}</span>
           </p>
         )}
 
-        <label>
-          DOI
-          <span className="inline">
-            <input
-              name="doi"
-              value={form.doi}
-              onChange={(e) => set('doi', e.target.value)}
-              placeholder="10.1038/nature12373 or https://doi.org/…"
-              maxLength={250}
-            />
-            <button className="btn" type="button" onClick={() => void onLookup()} disabled={lookingUp || !form.doi.trim()}>
-              {lookingUp ? 'Looking up…' : 'Auto-fill from DOI'}
-            </button>
-          </span>
-        </label>
+        <div className="doi-callout">
+          <label>
+            DOI
+            <span className="inline">
+              <input
+                name="doi"
+                value={form.doi}
+                onChange={(e) => set('doi', e.target.value)}
+                placeholder="10.1038/nature12373 or https://doi.org/…"
+                maxLength={250}
+              />
+              <button className="btn" type="button" onClick={() => void onLookup()} disabled={lookingUp || !form.doi.trim()}>
+                <SparklesIcon size={15} />
+                <span>{lookingUp ? 'Looking up…' : 'Auto-fill from DOI'}</span>
+              </button>
+            </span>
+          </label>
+          <p className="doi-callout-hint">Optional: paste a DOI or doi.org link to pre-populate title, authors, venue, and year.</p>
+        </div>
 
         <label>
           Title *
           <input name="title" required maxLength={500} value={form.title} onChange={(e) => set('title', e.target.value)} />
         </label>
         <label>
-          Authors * <span className="muted small">(one per line)</span>
+          <span>
+            Authors * <span className="muted small">(one per line)</span>
+          </span>
           <textarea name="authors" required rows={4} value={form.authors} onChange={(e) => set('authors', e.target.value)} />
         </label>
         <label>
@@ -208,7 +225,9 @@ export function PublicationFormPage() {
           </label>
         </div>
         <label>
-          PDF link <span className="muted small">(https:// only)</span>
+          <span>
+            PDF link <span className="muted small">(https:// only)</span>
+          </span>
           <input
             name="pdfUrl"
             type="url"

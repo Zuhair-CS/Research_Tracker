@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { api, errorMessage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { AlertCircleIcon, CheckIcon, ExternalLinkIcon, InfoIcon, LinkIcon } from '../components/Icons';
 import { useDepartments } from '../hooks';
 import { typeLabel, type OrcidWork } from '../types';
 
@@ -80,23 +81,36 @@ export function OrcidPage() {
   return (
     <section>
       <div className="page-head">
-        <h1>ORCID import</h1>
+        <div className="page-title-group">
+          <span className="eyebrow">External Sync</span>
+          <h1>ORCID import</h1>
+          <p className="page-subtitle">Connect your ORCID researcher identifier to pull works directly into your profile.</p>
+        </div>
       </div>
+
       {error && (
         <p className="alert error" role="alert">
-          {error}
+          <AlertCircleIcon size={16} />
+          <span>{error}</span>
         </p>
       )}
 
       <div className="card">
         {user?.orcidId ? (
           <div className="orcid-linked">
-            <p>
-              Linked ORCID iD:{' '}
-              <a href={`https://orcid.org/${user.orcidId}`} target="_blank" rel="noopener noreferrer">
-                {user.orcidId}
-              </a>
-            </p>
+            <div className="orcid-status-group">
+              <span className="tag tag-ok">
+                <CheckIcon size={12} />
+                <span>Connected</span>
+              </span>
+              <p>
+                Linked ORCID iD:{' '}
+                <a className="link-pill mono" href={`https://orcid.org/${user.orcidId}`} target="_blank" rel="noopener noreferrer">
+                  <span>{user.orcidId}</span>
+                  <ExternalLinkIcon size={11} />
+                </a>
+              </p>
+            </div>
             <div className="actions">
               <button className="btn primary" type="button" onClick={loadWorks} disabled={busy}>
                 Load my works from ORCID
@@ -119,7 +133,8 @@ export function OrcidPage() {
               />
             </label>
             <button className="btn primary" type="submit" disabled={busy}>
-              Link ORCID iD
+              <LinkIcon size={15} />
+              <span>Link ORCID iD</span>
             </button>
           </form>
         )}
@@ -127,14 +142,17 @@ export function OrcidPage() {
 
       {result && (
         <p className="alert info" role="status">
-          Imported {result.imported.length} publication(s)
-          {result.skipped.length > 0 && `, skipped ${result.skipped.length} (${result.skipped.map((s) => s.reason).join('; ')})`}.
+          <InfoIcon size={16} />
+          <span>
+            Imported {result.imported.length} publication(s)
+            {result.skipped.length > 0 && `, skipped ${result.skipped.length} (${result.skipped.map((s) => s.reason).join('; ')})`}.
+          </span>
         </p>
       )}
 
       {works && (
         <div className="card table-card">
-          <div className="page-head">
+          <div className="table-meta-bar">
             <p className="muted small">{works.length} work(s) on your ORCID record</p>
             <div className="actions">
               <label className="inline-label">
@@ -168,7 +186,7 @@ export function OrcidPage() {
               </thead>
               <tbody>
                 {works.map((w) => (
-                  <tr key={w.putCode}>
+                  <tr key={w.putCode} className={w.alreadyImported ? 'inactive' : ''}>
                     <td>
                       <input
                         type="checkbox"
@@ -178,12 +196,25 @@ export function OrcidPage() {
                         onChange={() => toggle(w.putCode)}
                       />
                     </td>
-                    <td>{w.title || <span className="muted">(no title)</span>}</td>
-                    <td>{w.venue ?? '—'}</td>
+                    <td className="title-cell">
+                      <span className="pub-title">{w.title || <span className="muted">(no title)</span>}</span>
+                    </td>
+                    <td>{w.venue ?? <span className="muted">—</span>}</td>
                     <td className="num">{w.year ?? '—'}</td>
-                    <td>{typeLabel(w.type)}</td>
-                    <td>{w.doi ?? '—'}</td>
-                    <td>{w.alreadyImported ? <span className="tag">Imported</span> : <span className="muted">New</span>}</td>
+                    <td>
+                      <span className="tag">{typeLabel(w.type)}</span>
+                    </td>
+                    <td className="mono">{w.doi ?? '—'}</td>
+                    <td>
+                      {w.alreadyImported ? (
+                        <span className="tag tag-ok">
+                          <CheckIcon size={11} />
+                          <span>Imported</span>
+                        </span>
+                      ) : (
+                        <span className="tag tag-accent">New</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

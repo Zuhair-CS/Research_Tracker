@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api/client';
+import { BookOpenIcon, InfoIcon, UsersIcon } from '../components/Icons';
+import { LoadingState } from '../components/LoadingState';
 import { AuthorWorks } from '../components/discover/AuthorWorks';
 import { PeopleSearch } from '../components/discover/PeopleSearch';
 import { PublicationSearch } from '../components/discover/PublicationSearch';
@@ -18,11 +20,22 @@ export function FindResearchPage() {
   return (
     <section>
       <div className="page-head">
-        <h1>Find research</h1>
+        <div className="page-title-group">
+          <span className="eyebrow">Scholarly Discovery</span>
+          <h1>Find research</h1>
+          <p className="page-subtitle">Explore researchers and publications across OpenAlex and Crossref.</p>
+        </div>
       </div>
+
       <div className="tabs" role="tablist" aria-label="Search type">
-        <button role="tab" aria-selected={tab === 'people'} className={tab === 'people' ? 'tab active' : 'tab'} onClick={() => setTab('people')}>
-          People
+        <button
+          role="tab"
+          aria-selected={tab === 'people'}
+          className={tab === 'people' ? 'tab active' : 'tab'}
+          onClick={() => setTab('people')}
+        >
+          <UsersIcon size={15} />
+          <span>People</span>
         </button>
         <button
           role="tab"
@@ -30,17 +43,22 @@ export function FindResearchPage() {
           className={tab === 'publications' ? 'tab active' : 'tab'}
           onClick={() => setTab('publications')}
         >
-          Publications
+          <BookOpenIcon size={15} />
+          <span>Publications</span>
         </button>
       </div>
-      <p className="muted small">
-        Searches <a href="https://openalex.org" target="_blank" rel="noopener noreferrer">OpenAlex</a> and{' '}
-        <a href="https://www.crossref.org" target="_blank" rel="noopener noreferrer">Crossref</a>, two free open catalogues of scholarly work.
-        Automatic author matching can mix up people with similar names, so papers are only added to an account after review.
+
+      <p className="info-strip">
+        <InfoIcon size={15} />
+        <span>
+          Searches <a href="https://openalex.org" target="_blank" rel="noopener noreferrer">OpenAlex</a> and{' '}
+          <a href="https://www.crossref.org" target="_blank" rel="noopener noreferrer">Crossref</a>, two free open catalogues of scholarly work.
+          Automatic author matching can mix up people with similar names, so papers are only added to an account after review.
+        </span>
       </p>
 
       {loading ? (
-        <p className="muted">Loading…</p>
+        <LoadingState />
       ) : tab === 'people' ? (
         // Keep the people list mounted while a profile is open, so "Back" returns to the same page of results.
         <>

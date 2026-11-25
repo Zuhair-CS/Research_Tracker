@@ -2,6 +2,16 @@ import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { api, errorMessage, toQueryString } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import {
+  AlertCircleIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  DownloadIcon,
+  ExternalLinkIcon,
+  FileTextIcon,
+  PlusCircleIcon,
+  SearchIcon,
+} from '../components/Icons';
 import { useAsync, useDepartments } from '../hooks';
 import { PUBLICATION_TYPES, typeLabel, type Page, type Publication } from '../types';
 
@@ -16,6 +26,7 @@ export function PublicationsPage() {
   // The filters live in the URL, so a search can be bookmarked or shared.
   const filters = Object.fromEntries(FILTER_KEYS.map((k) => [k, params.get(k) ?? ''])) as Record<(typeof FILTER_KEYS)[number], string>;
   const page = Number(params.get('page') ?? '1') || 1;
+  const activeFilterCount = FILTER_KEYS.filter((k) => k !== 'sort' && Boolean(filters[k])).length;
 
   const { data, error, loading, reload } = useAsync(
     () => api<Page<Publication>>('/publications', { query: { ...filters, page, pageSize: 20 } }),
@@ -56,15 +67,21 @@ export function PublicationsPage() {
   return (
     <section>
       <div className="page-head">
-        <h1>Publications</h1>
+        <div className="page-title-group">
+          <span className="eyebrow">Institutional Repository</span>
+          <h1>Publications</h1>
+          <p className="page-subtitle">Browse, filter, and export verified departmental research output.</p>
+        </div>
         <div className="actions">
           {/* A plain link: the browser sends the session cookie and downloads the file. */}
           <a className="btn" href={exportHref} download data-testid="export-csv">
-            Export CSV
+            <DownloadIcon size={15} />
+            <span>Export CSV</span>
           </a>
           {user?.role === 'RESEARCHER' && (
             <Link className="btn primary" to="/publications/new">
-              Add publication
+              <PlusCircleIcon size={15} />
+              <span>Add publication</span>
             </Link>
           )}
         </div>
@@ -77,7 +94,7 @@ export function PublicationsPage() {
         </label>
         <label>
           Author
-          <input name="author" defaultValue={filters.author} maxLength={200} />
+          <input name="author" placeholder="e.g. Rahman" defaultValue={filters.author} maxLength={200} />
         </label>
         <label>
           Department
@@ -125,7 +142,8 @@ export function PublicationsPage() {
         )}
         <div className="filter-buttons">
           <button className="btn primary" type="submit">
-            Search
+            <SearchIcon size={15} />
+            <span>Search</span>
           </button>
           <button className="btn ghost" type="button" onClick={() => setParams(new URLSearchParams())}>
             Clear
@@ -135,12 +153,23 @@ export function PublicationsPage() {
 
       {(error || actionError) && (
         <p className="alert error" role="alert">
-          {error ?? actionError}
+          <AlertCircleIcon size={16} />
+          <span>{error ?? actionError}</span>
         </p>
       )}
 
       <div className="card table-card">
-        <p className="muted small">{loading ? 'Loading…' : `${data?.total ?? 0} publication(s)`}</p>
+        <div className="table-meta-bar">
+          <p className="muted small">
+            {loading ? 'Loading…' : `${data?.total ?? 0} publication(s)`}
+            {activeFilterCount > 0 && ` · ${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''} active`}
+          </p>
+          {totalPages > 1 && (
+            <span className="muted small">
+              Page {page} of {totalPages}
+            </span>
+          )}
+        </div>
         <div className="table-scroll">
           <table>
             <thead>
@@ -161,44 +190,52 @@ export function PublicationsPage() {
                   <td className="title-cell">
                     {/* React escapes all text, so a title containing <script> is shown, never run. */}
                     <span className="pub-title">{p.title}</span>
-                    <span className="links">
-                      {p.doi && (
-                        <a href={`https://doi.org/${encodeURI(p.doi)}`} target="_blank" rel="noopener noreferrer">
-                          DOI {p.doi}
-                        </a>
-                      )}
-                      {p.pdfUrl && (
-                        <a href={p.pdfUrl} target="_blank" rel="noopener noreferrer">
-                          PDF
-                        </a>
-                      )}
-                    </span>
+                    {(p.doi || p.pdfUrl) && (
+                      <span className="links">
+                        {p.doi && (
+                          <a className="link-pill mono" href={`https://doi.org/${encodeURI(p.doi)}`} target="_blank" rel="noopener noreferrer">
+                            <span>DOI {p.doi}</span>
+                            <ExternalLinkIcon size={11} />
+                          </a>
+                        )}
+                        {p.pdfUrl && (
+                          <a className="link-pill" href={p.pdfUrl} target="_blank" rel="noopener noreferrer">
+                            <FileTextIcon size={11} />
+                            <span>PDF</span>
+                          </a>
+                        )}
+                      </span>
+                    )}
                   </td>
                   <td>{p.authors.join(', ')}</td>
-                  <td>{p.venue ?? '—'}</td>
+                  <td>{p.venue ?? <span className="muted">—</span>}</td>
                   <td className="num">{p.year}</td>
                   <td>
                     <span className="tag">{typeLabel(p.type)}</span>
                   </td>
-                  <td>{p.department.code}</td>
-                  <td>{p.owner.name}</td>
-                  <td className="row-actions">
-                    {p.canEdit && (
-                      <>
-                        <Link className="btn small" to={`/publications/${p.id}/edit`}>
-                          Edit
-                        </Link>
-                        <button className="btn small danger" type="button" onClick={() => void onDelete(p)}>
-                          Delete
-                        </button>
-                      </>
-                    )}
+                  <td>
+                    <span className="tag tag-mono">{p.department.code}</span>
+                  </td>
+                  <td className="nowrap">{p.owner.name}</td>
+                  <td>
+                    <div className="row-actions">
+                      {p.canEdit && (
+                        <>
+                          <Link className="btn small" to={`/publications/${p.id}/edit`}>
+                            Edit
+                          </Link>
+                          <button className="btn small danger" type="button" onClick={() => void onDelete(p)}>
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
               {data && data.items.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="muted center">
+                  <td colSpan={8} className="empty-state">
                     No publications match these filters.
                   </td>
                 </tr>
@@ -208,15 +245,19 @@ export function PublicationsPage() {
         </div>
         {totalPages > 1 && (
           <div className="pager">
-            <button className="btn small" type="button" disabled={page <= 1} onClick={() => goToPage(page - 1)}>
-              Previous
-            </button>
             <span className="muted small">
               Page {page} of {totalPages}
             </span>
-            <button className="btn small" type="button" disabled={page >= totalPages} onClick={() => goToPage(page + 1)}>
-              Next
-            </button>
+            <div className="pager-controls">
+              <button className="btn small" type="button" disabled={page <= 1} onClick={() => goToPage(page - 1)}>
+                <ChevronLeftIcon size={14} />
+                <span>Previous</span>
+              </button>
+              <button className="btn small" type="button" disabled={page >= totalPages} onClick={() => goToPage(page + 1)}>
+                <span>Next</span>
+                <ChevronRightIcon size={14} />
+              </button>
+            </div>
           </div>
         )}
       </div>

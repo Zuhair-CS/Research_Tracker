@@ -1,4 +1,5 @@
 import { typeLabel, workKey, type ScholarlyWork } from '../../types';
+import { CheckIcon, ExternalLinkIcon, FileTextIcon } from '../Icons';
 
 interface Props {
   works: ScholarlyWork[];
@@ -14,7 +15,7 @@ const fmt = (n: number) => n.toLocaleString();
  * was found in. Text is rendered by React (escaped), links are https only.
  */
 export function WorkList({ works, selected, onToggle, emptyText = 'No papers found.' }: Props) {
-  if (works.length === 0) return <p className="muted pad">{emptyText}</p>;
+  if (works.length === 0) return <p className="muted empty-state">{emptyText}</p>;
   return (
     <ul className="work-list">
       {works.map((w) => {
@@ -45,20 +46,27 @@ export function WorkList({ works, selected, onToggle, emptyText = 'No papers fou
                 {w.authors.length > 8 && ` +${w.authors.length - 8} more`}
               </div>
               <div className="work-meta">
-                {[w.venue, w.year, typeLabel(w.type)].filter(Boolean).join(' · ')}
+                <span>{[w.venue, w.year, typeLabel(w.type)].filter(Boolean).join(' · ')}</span>
                 <span>Cited by {fmt(w.citedByCount)}</span>
                 {w.pdfUrl && (
-                  <a href={w.pdfUrl} target="_blank" rel="noopener noreferrer">
-                    PDF
+                  <a className="link-pill" href={w.pdfUrl} target="_blank" rel="noopener noreferrer">
+                    <FileTextIcon size={11} />
+                    <span>PDF</span>
+                    <ExternalLinkIcon size={10} />
                   </a>
                 )}
-                {w.openAccess && <span className="tag">Open access</span>}
+                {w.openAccess && <span className="tag tag-ok">Open access</span>}
                 {w.sources.map((s) => (
-                  <span key={s} className={`tag source-${s}`}>
+                  <span key={s} className={`tag source-${s}${s === 'openalex' ? ' tag-accent' : ''}`}>
                     {s === 'openalex' ? 'OpenAlex' : 'Crossref'}
                   </span>
                 ))}
-                {w.alreadyImported && <span className="tag tag-ok">Imported</span>}
+                {w.alreadyImported && (
+                  <span className="tag tag-ok">
+                    <CheckIcon size={11} />
+                    <span>Imported</span>
+                  </span>
+                )}
                 {w.matchNote && <span className="tag tag-warn">Unconfirmed: {w.matchNote}</span>}
               </div>
             </div>

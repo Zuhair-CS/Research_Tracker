@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { api, errorMessage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { AlertCircleIcon, ArrowLeftIcon, CheckIcon, InfoIcon } from '../components/Icons';
+import { LoadingState } from '../components/LoadingState';
 import { useAsync, useDepartments } from '../hooks';
 import { typeLabel, type Claim } from '../types';
 
@@ -27,8 +29,15 @@ export function ClaimPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
 
-  if (error) return <p className="alert error">{error}</p>;
-  if (!claim) return <p className="muted">Loading…</p>;
+  if (error) {
+    return (
+      <p className="alert error" role="alert">
+        <AlertCircleIcon size={16} />
+        <span>{error}</span>
+      </p>
+    );
+  }
+  if (!claim) return <LoadingState />;
 
   const works = claim.works ?? [];
   const isMine = user?.id === claim.researcher.id;
@@ -71,9 +80,13 @@ export function ClaimPage() {
   return (
     <section>
       <div className="page-head">
-        <h1>{isMine ? 'Are these your papers?' : 'Claim request'}</h1>
+        <div className="page-title-group">
+          <span className="eyebrow">Claim Verification</span>
+          <h1>{isMine ? 'Are these your papers?' : 'Claim request'}</h1>
+        </div>
         <Link className="btn ghost" to="/claims">
-          All requests
+          <ArrowLeftIcon size={15} />
+          <span>All requests</span>
         </Link>
       </div>
 
@@ -95,10 +108,15 @@ export function ClaimPage() {
         </p>
       </div>
 
-      {message && <p className={`alert ${message.kind}`}>{message.text}</p>}
+      {message && (
+        <p className={`alert ${message.kind}`} role={message.kind === 'error' ? 'alert' : 'status'}>
+          {message.kind === 'error' ? <AlertCircleIcon size={16} /> : <InfoIcon size={16} />}
+          <span>{message.text}</span>
+        </p>
+      )}
 
       {canAnswer && (
-        <div className="card action-bar">
+        <div className="card action-bar has-selection">
           <span className="muted small grow-text">
             Untick anything that is not yours. Approving adds the {chosen.length} ticked paper(s) to your profile.
           </span>
@@ -175,9 +193,14 @@ export function ClaimPage() {
                 </div>
                 <div className="work-authors">{w.authors.join(', ')}</div>
                 <div className="work-meta">
-                  {[w.venue, w.year, typeLabel(w.type)].filter(Boolean).join(' · ')}
+                  <span>{[w.venue, w.year, typeLabel(w.type)].filter(Boolean).join(' · ')}</span>
                   <span>Cited by {w.citedByCount.toLocaleString()}</span>
-                  {w.alreadyImported && <span className="tag tag-ok">Already in your profile</span>}
+                  {w.alreadyImported && (
+                    <span className="tag tag-ok">
+                      <CheckIcon size={11} />
+                      <span>Already in your profile</span>
+                    </span>
+                  )}
                 </div>
               </div>
             </li>
