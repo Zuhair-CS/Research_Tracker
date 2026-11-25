@@ -38,7 +38,9 @@ COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 COPY --from=builder /app/apps/api/prisma.config.ts ./apps/api/prisma.config.ts
 COPY --from=builder /app/apps/web/dist ./apps/web/dist
 
-# Run as unprivileged built-in 'node' user
+# Run as unprivileged built-in 'node' user and remove npm/corepack from runtime image
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+
 USER node
 
 EXPOSE 3000
