@@ -1,0 +1,374 @@
+# ---------------------------------------------------------------------------
+# PB-1 Publication Tracker - DevSecOps security pipeline
+#
+#   SAST : CodeQL (GitHub's analyser for TypeScript) + Semgrep (Express/React/OWASP rules)
+#   SCA  : npm audit + Trivy (dependencies, leaked secrets, misconfig)
+#          + Dependency Review (blocks PRs that ADD a vulnerable package)
+#   DAST : OWASP ZAP baseline scan against the real app (API + built React UI)
+#          running in the runner with a throwaway PostgreSQL database
+#
+# Results: Security tab -> Code scanning (SARIF), plus downloadable artifacts.
+# SECURITY: every third-party action is pinned to a full commit SHA (same idea
+# as `save-exact=true` in .npmrc): a moved or hijacked tag cannot change what runs.
+# ---------------------------------------------------------------------------
+name: Security (SAST / SCA / DAST)
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  schedule:
+    - cron: "30 21 * * 0" # every Monday 03:00 IST - catches CVEs published after the last push
+  workflow_dispatch:
+
+# Least privilege by default; jobs ask for more only when they need it.
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22" # latest 22.x - eslint 10 needs >= 22.13 and .npmrc has engine-strict=true
+
+jobs:
+  # ========================================================================
+  # SAST 1/2 - CodeQL
+  # ========================================================================
+  sast-codeql:
+    name: SAST - CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          languages: javascript-typescript
+          build-mode: none # JS/TS is analysed from source, no build needed
+          queries: security-extended # more security rules than the default set
+          config: |
+            paths-ignore:
+              - apps/api/src/generated
+              - "**/dist"
+      - name: Run CodeQL analysis
+        uses: github/codeql-action/analyze@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          category: codeql
+
+  # ========================================================================
+  # SAST 2/2 - Semgrep
+  # ========================================================================
+  sast-semgrep:
+    name: SAST - Semgrep
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Semgrep
+        run: pipx install semgrep
+      - name: Semgrep scan
+        run: |
+          semgrep scan \
+            --config p/typescript \
+            --config p/javascript \
+            --config p/react \
+            --config p/nodejsscan \
+            --config p/owasp-top-ten \
+            --config p/secrets \
+            --exclude apps/api/src/generated \
+            --metrics=off \
+            --sarif --output semgrep.sarif \
+            --error --severity ERROR
+      - name: Upload Semgrep results to Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: semgrep-report
+          path: semgrep.sarif
+
+  # ========================================================================
+  # SCA - dependencies (npm audit + Trivy + Dependency Review)
+  # ========================================================================
+  sca:
+    name: SCA - Dependencies
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write # Dependency Review comments its summary on the PR
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # npm's own advisory database, read straight from package-lock.json (no install needed).
+      - name: npm audit (fail on high/critical)
+        run: npm audit --audit-level=high
+
+      # Full Trivy report (all severities) -> Security tab.
+      - name: Trivy scan - report
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          skip-dirs: node_modules
+          format: sarif
+          output: trivy.sarif
+      - name: Upload Trivy results to Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+
+      # Gate: fail the job on HIGH/CRITICAL vulnerabilities that have a fix, or any leaked secret.
+      - name: Trivy scan - gate
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          skip-dirs: node_modules
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+          skip-setup-trivy: true # reuse the Trivy binary installed by the previous step
+
+      # Only on PRs: block a PR that introduces a vulnerable or newly-added risky dependency.
+      - name: Dependency Review
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: trivy-report
+          path: trivy.sarif
+
+  # ========================================================================
+  # DAST - OWASP ZAP baseline against the running application
+  # ========================================================================
+  dast:
+    name: DAST - OWASP ZAP
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      # Throwaway database that exists only for this job (never reachable from outside the runner).
+      db:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: pubtrack
+          POSTGRES_PASSWORD: ci-throwaway-password
+          POSTGRES_DB: pubtrack
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pubtrack -d pubtrack"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # Production-like settings, so ZAP tests what users will actually get.
+      NODE_ENV: production
+      PORT: "3000"
+      LOG_LEVEL: warn
+      DATABASE_URL: postgresql://pubtrack:ci-throwaway-password@localhost:5432/pubtrack
+      COOKIE_SECURE: "true" # required by the app in production mode
+      TRUST_PROXY: "0"
+      CORS_ORIGINS: ""
+      WEB_DIST_DIR: apps/web/dist # Express serves the built React app (same origin)
+      SIGNUP_ENABLED: "true" # include the sign-up page in the scan
+      APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Generate a one-off session secret
+        run: |
+          SECRET="$(openssl rand -base64 48)"
+          echo "::add-mask::$SECRET"
+          echo "SESSION_SECRET=$SECRET" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Build API and web app
+        run: npm run build
+
+      - name: Apply database migrations
+        run: npm run db:deploy -w apps/api
+
+      - name: Start the application
+        run: nohup node apps/api/dist/server.js > api.log 2>&1 &
+
+      - name: Wait until the app is ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS "$APP_URL/api/health/ready" >/dev/null; then
+              echo "App is ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "App did not become ready"; cat api.log; exit 1
+
+      - name: OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
+        with:
+          target: ${{ env.APP_URL }}
+          cmd_options: "-a" # include alpha passive rules
+          allow_issue_writing: false # report via artifact, don't open GitHub issues
+          fail_action: true
+          artifact_name: zap-baseline-report
+          rules_file_name: .zap/rules.tsv
+
+      - name: Upload application log
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dast-app-log
+          path: api.log
+
+  # ========================================================================
+  # CD - Build hardened Docker image, scan with Trivy, push to GHCR on master
+  # ========================================================================
+  deploy:
+    name: CD - Docker Build & Publish
+    runs-on: ubuntu-latest
+    needs: [sast-codeql, sast-semgrep, sca, dast]
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set lowercase image name
+        run: |
+          IMAGE="ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          echo "IMAGE_NAME=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Build production Docker image
+        run: |
+          docker build \
+            -t "${{ env.IMAGE_NAME }}:${{ github.sha }}" \
+            -t "${{ env.IMAGE_NAME }}:latest" \
+            .
+
+      - name: Trivy container image scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: "${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+
+      - name: Push image to GitHub Container Registry (master/main only)
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          docker push "${{ env.IMAGE_NAME }}:latest"
+
+  # ========================================================================
+  # Pipeline Summary - visual Mermaid diagram + status table in Job Summary
+  # ========================================================================
+  summary:
+    name: Pipeline Summary
+    runs-on: ubuntu-latest
+    needs: [sast-codeql, sast-semgrep, sca, dast, deploy]
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Publish pipeline summary
+        env:
+          RES_CODEQL: ${{ needs.sast-codeql.result }}
+          RES_SEMGREP: ${{ needs.sast-semgrep.result }}
+          RES_SCA: ${{ needs.sca.result }}
+          RES_DAST: ${{ needs.dast.result }}
+          RES_DEPLOY: ${{ needs.deploy.result }}
+        run: |
+          badge() {
+            case "$1" in
+              success) echo "✅ Passed" ;;
+              failure) echo "❌ Failed" ;;
+              skipped) echo "⏭️ Skipped" ;;
+              *)       echo "⚠️ $1" ;;
+            esac
+          }
+          cls() {
+            case "$1" in
+              success) echo "pass" ;;
+              failure) echo "fail" ;;
+              *)       echo "warn" ;;
+            esac
+          }
+
+          GATE="pass"
+          for r in "$RES_CODEQL" "$RES_SEMGREP" "$RES_SCA" "$RES_DAST"; do
+            if [ "$r" != "success" ]; then
+              GATE="fail"
+            fi
+          done
+
+          {
+            echo "## DevSecOps Security Pipeline"
+            echo ""
+            echo "| Stage | Tool(s) | Status | Output / Report |"
+            echo "| --- | --- | --- | --- |"
+            echo "| SAST (1/2) | CodeQL (TypeScript/JS) | $(badge "$RES_CODEQL") | Security tab → Code scanning |"
+            echo "| SAST (2/2) | Semgrep (Express, React, OWASP, Secrets) | $(badge "$RES_SEMGREP") | Security tab + \`semgrep-report\` artifact |"
+            echo "| SCA | npm audit + Trivy + Dependency Review | $(badge "$RES_SCA") | Security tab + \`trivy-report\` artifact |"
+            echo "| DAST | OWASP ZAP Baseline (http://localhost:3000) | $(badge "$RES_DAST") | \`zap-baseline-report\` + \`dast-app-log\` artifacts |"
+            echo "| CD | Docker Build + Trivy Image Scan + GHCR | $(badge "$RES_DEPLOY") | \`ghcr.io\` (published on \`master\`) |"
+            echo ""
+            echo "### Pipeline Flow"
+            echo ""
+            echo '```mermaid'
+            echo "flowchart LR"
+            echo "  T[\"Trigger: ${{ github.event_name }}\"] --> C[\"SAST: CodeQL<br/>($RES_CODEQL)\"]:::$(cls "$RES_CODEQL")"
+            echo "  T --> S[\"SAST: Semgrep<br/>($RES_SEMGREP)\"]:::$(cls "$RES_SEMGREP")"
+            echo "  T --> A[\"SCA: npm audit / Trivy / Dep Review<br/>($RES_SCA)\"]:::$(cls "$RES_SCA")"
+            echo "  T --> D[\"DAST: OWASP ZAP<br/>($RES_DAST)\"]:::$(cls "$RES_DAST")"
+            echo "  C --> G[\"Security Gate\"]:::$GATE"
+            echo "  S --> G"
+            echo "  A --> G"
+            echo "  D --> G"
+            echo "  G --> P[\"CD: Docker + Trivy + GHCR<br/>($RES_DEPLOY)\"]:::$(cls "$RES_DEPLOY")"
+            echo "  classDef pass fill:#166534,stroke:#22c55e,color:#ffffff"
+            echo "  classDef fail fill:#991b1b,stroke:#ef4444,color:#ffffff"
+            echo "  classDef warn fill:#854d0e,stroke:#eab308,color:#ffffff"
+            echo '```'
+            echo ""
+            echo "- [View Code Scanning Alerts](https://github.com/${{ github.repository }}/security/code-scanning)"
+            echo "- [View Run Artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts)"
+          } >> "$GITHUB_STEP_SUMMARY"
