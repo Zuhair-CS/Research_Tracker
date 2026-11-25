@@ -256,12 +256,55 @@ jobs:
           path: api.log
 
   # ========================================================================
+  # CD - Build hardened Docker image, scan with Trivy, push to GHCR on master
+  # ========================================================================
+  deploy:
+    name: CD - Docker Build & Publish
+    runs-on: ubuntu-latest
+    needs: [sast-codeql, sast-semgrep, sca, dast]
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set lowercase image name
+        run: |
+          IMAGE="ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          echo "IMAGE_NAME=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Build production Docker image
+        run: |
+          docker build \
+            -t "${{ env.IMAGE_NAME }}:${{ github.sha }}" \
+            -t "${{ env.IMAGE_NAME }}:latest" \
+            .
+
+      - name: Trivy container image scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: "${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+
+      - name: Push image to GitHub Container Registry (master/main only)
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          docker push "${{ env.IMAGE_NAME }}:latest"
+
+  # ========================================================================
   # Pipeline Summary - visual Mermaid diagram + status table in Job Summary
   # ========================================================================
   summary:
     name: Pipeline Summary
     runs-on: ubuntu-latest
-    needs: [sast-codeql, sast-semgrep, sca, dast]
+    needs: [sast-codeql, sast-semgrep, sca, dast, deploy]
     if: always()
     permissions:
       contents: read
@@ -272,6 +315,7 @@ jobs:
           RES_SEMGREP: ${{ needs.sast-semgrep.result }}
           RES_SCA: ${{ needs.sca.result }}
           RES_DAST: ${{ needs.dast.result }}
+          RES_DEPLOY: ${{ needs.deploy.result }}
         run: |
           badge() {
             case "$1" in
@@ -305,6 +349,7 @@ jobs:
             echo "| SAST (2/2) | Semgrep (Express, React, OWASP, Secrets) | $(badge "$RES_SEMGREP") | Security tab + \`semgrep-report\` artifact |"
             echo "| SCA | npm audit + Trivy + Dependency Review | $(badge "$RES_SCA") | Security tab + \`trivy-report\` artifact |"
             echo "| DAST | OWASP ZAP Baseline (http://localhost:3000) | $(badge "$RES_DAST") | \`zap-baseline-report\` + \`dast-app-log\` artifacts |"
+            echo "| CD | Docker Build + Trivy Image Scan + GHCR | $(badge "$RES_DEPLOY") | \`ghcr.io\` (published on \`master\`) |"
             echo ""
             echo "### Pipeline Flow"
             echo ""
@@ -318,6 +363,7 @@ jobs:
             echo "  S --> G"
             echo "  A --> G"
             echo "  D --> G"
+            echo "  G --> P[\"CD: Docker + Trivy + GHCR<br/>($RES_DEPLOY)\"]:::$(cls "$RES_DEPLOY")"
             echo "  classDef pass fill:#166534,stroke:#22c55e,color:#ffffff"
             echo "  classDef fail fill:#991b1b,stroke:#ef4444,color:#ffffff"
             echo "  classDef warn fill:#854d0e,stroke:#eab308,color:#ffffff"
