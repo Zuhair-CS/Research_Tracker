@@ -19,7 +19,7 @@ on:
   pull_request:
     branches: [master, main]
   schedule:
-    - cron: "30 21 * * 0"   # every Monday 03:00 IST - catches CVEs published after the last push
+    - cron: "30 21 * * 0" # every Monday 03:00 IST - catches CVEs published after the last push
   workflow_dispatch:
 
 # Least privilege by default; jobs ask for more only when they need it.
@@ -31,7 +31,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: "22.12"
+  NODE_VERSION: "22" # latest 22.x - eslint 10 needs >= 22.13 and .npmrc has engine-strict=true
 
 jobs:
   # ========================================================================
@@ -50,8 +50,8 @@ jobs:
         uses: github/codeql-action/init@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
         with:
           languages: javascript-typescript
-          build-mode: none            # JS/TS is analysed from source, no build needed
-          queries: security-extended  # more security rules than the default set
+          build-mode: none # JS/TS is analysed from source, no build needed
+          queries: security-extended # more security rules than the default set
           config: |
             paths-ignore:
               - apps/api/src/generated
@@ -108,7 +108,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      pull-requests: write   # Dependency Review comments its summary on the PR
+      pull-requests: write # Dependency Review comments its summary on the PR
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -151,7 +151,7 @@ jobs:
           ignore-unfixed: true
           format: table
           exit-code: "1"
-          skip-setup-trivy: true   # reuse the Trivy binary installed by the previous step
+          skip-setup-trivy: true # reuse the Trivy binary installed by the previous step
 
       # Only on PRs: block a PR that introduces a vulnerable or newly-added risky dependency.
       - name: Dependency Review
@@ -196,11 +196,11 @@ jobs:
       PORT: "3000"
       LOG_LEVEL: warn
       DATABASE_URL: postgresql://pubtrack:ci-throwaway-password@localhost:5432/pubtrack
-      COOKIE_SECURE: "true"          # required by the app in production mode
+      COOKIE_SECURE: "true" # required by the app in production mode
       TRUST_PROXY: "0"
       CORS_ORIGINS: ""
-      WEB_DIST_DIR: apps/web/dist    # Express serves the built React app (same origin)
-      SIGNUP_ENABLED: "true"         # include the sign-up page in the scan
+      WEB_DIST_DIR: apps/web/dist # Express serves the built React app (same origin)
+      SIGNUP_ENABLED: "true" # include the sign-up page in the scan
       APP_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -242,9 +242,9 @@ jobs:
         uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
         with:
           target: ${{ env.APP_URL }}
-          cmd_options: "-a"                 # include alpha passive rules
-          allow_issue_writing: false        # report via artifact, don't open GitHub issues
-          fail_action: false                # set to true once false positives are listed in .zap/rules.tsv
+          cmd_options: "-a" # include alpha passive rules
+          allow_issue_writing: false # report via artifact, don't open GitHub issues
+          fail_action: false # set to true once false positives are listed in .zap/rules.tsv
           artifact_name: zap-baseline-report
           # rules_file_name: .zap/rules.tsv # uncomment after creating the file
 
