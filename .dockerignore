@@ -1,0 +1,13 @@
+.git
+.github
+.zap
+.env
+.env.*
+*.log
+node_modules
+apps/*/node_modules
+apps/*/dist
+apps/api/src/generated
+coverage
+playwright-report
+test-results
