@@ -217,7 +217,7 @@ jobs:
           echo "SESSION_SECRET=$SECRET" >> "$GITHUB_ENV"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=dev
 
       - name: Build API and web app
         run: npm run build
