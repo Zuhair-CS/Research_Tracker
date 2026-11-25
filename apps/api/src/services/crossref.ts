@@ -18,7 +18,10 @@ export interface PublicationDraft {
 
 /** A Crossref search hit, plus the affiliation text used to check "is this from our university?". */
 export interface CrossrefHit extends ScholarlyWork {
+  /** Every affiliation text on the paper (any author). */
   affiliations: string[];
+  /** Each author with their own affiliations, to tell "this person at UPES" from "a co-author at UPES". */
+  authorList: { name: string; affiliations: string[] }[];
 }
 
 // Only the fields we use; everything else in the Crossref response is ignored.
@@ -82,9 +85,13 @@ const CROSSREF_TYPES: Record<PublicationType, string[]> = {
 
 function mapItem(m: CrossrefItem): CrossrefHit {
   const year = m.issued?.['date-parts']?.[0]?.[0] ?? m.published?.['date-parts']?.[0]?.[0] ?? null;
-  const authors = (m.author ?? [])
-    .map((a) => plainText(a.name ?? [a.given, a.family].filter(Boolean).join(' ')))
-    .filter((name) => name.length > 0);
+  const authorList = (m.author ?? [])
+    .map((a) => ({
+      name: plainText(a.name ?? [a.given, a.family].filter(Boolean).join(' ')),
+      affiliations: (a.affiliation ?? []).map((af) => plainText(af.name ?? '')).filter(Boolean),
+    }))
+    .filter((a) => a.name.length > 0);
+  const authors = authorList.map((a) => a.name);
   // Only accept an https:// PDF link, never javascript: or http: URLs.
   const pdf = (m.link ?? []).find((l) => l['content-type'] === 'application/pdf' && l.URL.startsWith('https://'));
   return {
@@ -99,7 +106,8 @@ function mapItem(m: CrossrefItem): CrossrefHit {
     citedByCount: m['is-referenced-by-count'] ?? 0,
     openAccess: false,
     sources: ['crossref'],
-    affiliations: (m.author ?? []).flatMap((a) => (a.affiliation ?? []).map((af) => af.name ?? '')).filter(Boolean),
+    affiliations: authorList.flatMap((a) => a.affiliations),
+    authorList,
   };
 }
 

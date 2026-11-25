@@ -18,7 +18,8 @@ export default tseslint.config(
     },
   },
   {
-    files: ['apps/api/**/*.ts'],
+    // Node code: the API, its tests, and the end-to-end test harness.
+    files: ['apps/api/**/*.ts', 'e2e/**/*.{ts,mjs}', '*.config.{ts,mjs}'],
     languageOptions: { globals: globals.node },
   },
   {

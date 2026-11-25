@@ -3,7 +3,7 @@ import { HttpError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { namesMatch, normalizeText, titleKey } from '../lib/names.js';
 import { searchCrossref, type CrossrefHit } from './crossref.js';
-import { authorHasDois, getAuthor, getAuthorWorks, getInstitutionName, searchWorks } from './openalex.js';
+import { authorHasDois, getAuthor, getAuthorWorks, getInstitutionName, searchWorks, searchWorksByAuthorName } from './openalex.js';
 import type { ScholarlyWork, WorkFilters } from './scholarly-types.js';
 
 /**
@@ -31,6 +31,7 @@ export function mergeWorks(primary: ScholarlyWork[], extra: ScholarlyWork[] = []
       match.venue ??= incoming.venue;
       match.citedByCount = Math.max(match.citedByCount, incoming.citedByCount);
       match.openAccess ||= incoming.openAccess;
+      match.matchNote ??= incoming.matchNote;
       if (match.doi) byDoi.set(match.doi, match);
       continue;
     }
@@ -47,6 +48,7 @@ export function mergeWorks(primary: ScholarlyWork[], extra: ScholarlyWork[] = []
       citedByCount: incoming.citedByCount,
       openAccess: incoming.openAccess,
       sources: [...incoming.sources],
+      ...(incoming.matchNote ? { matchNote: incoming.matchNote } : {}),
     };
     out.push(w);
     if (w.doi) byDoi.set(w.doi, w);
@@ -134,41 +136,115 @@ export async function searchPublications(s: PublicationSearch) {
   };
 }
 
+/** Most "possible matches" shown at once (they all need a human check). */
+const MAX_POSSIBLE = 60;
+
 /**
- * A researcher's papers: their OpenAlex profile, plus (on page 1) papers that
- * Crossref attributes to the same name AND institution but OpenAlex missed.
+ * A researcher's papers, from one or more OpenAlex profiles (the first id is
+ * the main profile, the rest are profiles the user chose to merge in).
+ *
+ * On page 1 two more lists are added:
+ *  - crossrefExtras ("confirmed"): Crossref papers with the same name AND the
+ *    person's institution in the affiliation text, missing from the profiles.
+ *  - possibleMatches ("unconfirmed"): papers with the same name where the
+ *    institution cannot be checked (no affiliation recorded), or that sit on a
+ *    different OpenAlex profile at the same institution. These are never
+ *    pre-selected: a person must look at each one, and the researcher still
+ *    approves anything an admin sends them.
+ * Papers listing the name at a DIFFERENT institution are dropped: they are
+ * most likely someone else with the same name.
  */
-export async function getResearcherWorks(authorId: string, filters: WorkFilters, page: number) {
-  const [author, oa] = await Promise.all([getAuthor(authorId), getAuthorWorks(authorId, filters, page)]);
+export async function getResearcherWorks(authorIds: string[], filters: WorkFilters, page: number) {
+  const mainId = authorIds[0] as string;
+  const [author, oa] = await Promise.all([getAuthor(mainId), getAuthorWorks(authorIds, filters, page)]);
   const works = mergeWorks(oa.works);
   let crossrefExtras: ScholarlyWork[] = [];
+  let possibleMatches: ScholarlyWork[] = [];
   const warnings: string[] = [];
 
-  if (page === 1 && !filters.openAccessOnly && author.name) {
-    try {
-      const ourNames = await ourInstitutionNames();
-      const institutions = [...author.institutions, ...(affiliationMatches(author.institutions, ourNames) ? ourNames : [])];
-      const cr = await searchCrossref({
-        ...filters,
-        sort: filters.sort === 'citations' ? 'citations' : undefined,
-        author: author.name,
-        affiliation: author.institutions[0],
-        offset: 0,
-        rows: 60,
-      });
-      // Strict on purpose: same name AND one of the person's institutions, so
-      // papers by other people with a similar name are not offered.
-      const candidates = cr.works.filter(
-        (w) => w.doi && w.authors.some((a) => namesMatch(a, author.name)) && affiliationMatches(w.affiliations, institutions),
-      );
-      const onProfile = await authorHasDois(authorId, candidates.map((c) => c.doi as string));
-      const seen = new Set(works.map((w) => titleKey(w.title, w.year)));
-      crossrefExtras = mergeWorks(candidates.filter((c) => !onProfile.has(c.doi as string) && !seen.has(titleKey(c.title, c.year))));
-    } catch (err) {
-      logger.warn({ error: String(err) }, 'Crossref supplement failed');
+  if (page === 1 && author.name) {
+    const ourNames = await ourInstitutionNames();
+    const institutions = [...author.institutions, ...(affiliationMatches(author.institutions, ourNames) ? ourNames : [])];
+    const instIds = new Set([config.OPENALEX_INSTITUTION_ID, ...author.institutionIds].filter(Boolean));
+    const profileIds = new Set(authorIds);
+
+    const [cr, byName] = await Promise.allSettled([
+      // Crossref has no open-access flag, so it is skipped for "open access only".
+      filters.openAccessOnly
+        ? Promise.resolve(null)
+        : searchCrossref({
+            ...filters,
+            sort: filters.sort === 'citations' ? 'citations' : undefined,
+            author: author.name,
+            affiliation: author.institutions[0],
+            offset: 0,
+            rows: 100,
+          }),
+      searchWorksByAuthorName(author.name, filters),
+    ]);
+
+    const confirmed: ScholarlyWork[] = [];
+    const possible: ScholarlyWork[] = [];
+
+    if (byName.status === 'fulfilled') {
+      for (const { work, matches } of byName.value) {
+        // Already on one of the profiles being shown.
+        if (matches.some((m) => m.authorId && profileIds.has(m.authorId))) continue;
+        const insts = matches.flatMap((m) => m.institutionIds);
+        if (insts.length === 0) {
+          possible.push({ ...work, matchNote: 'Same name on OpenAlex, but no affiliation is recorded' });
+        } else if (insts.some((i) => instIds.has(i))) {
+          possible.push({ ...work, matchNote: 'Same name and institution, but on another OpenAlex profile' });
+        }
+      }
+    } else {
+      logger.warn({ error: String(byName.reason) }, 'OpenAlex name search failed');
+      warnings.push('Could not search OpenAlex for other papers under this name right now.');
+    }
+
+    if (cr.status === 'fulfilled' && cr.value) {
+      for (const w of cr.value.works) {
+        const me = w.authorList.filter((a) => namesMatch(a.name, author.name));
+        if (!w.doi || me.length === 0) continue;
+        const own = me.flatMap((a) => a.affiliations);
+        if (own.length > 0) {
+          // The person's own affiliation is printed: keep only if it is their institution.
+          if (affiliationMatches(own, institutions)) confirmed.push(w);
+        } else if (affiliationMatches(w.affiliations, institutions)) {
+          // No affiliation for them, but a co-author is from the same institution: strong hint.
+          confirmed.push(w);
+        } else {
+          possible.push({ ...w, matchNote: 'Same name on Crossref, but no affiliation is recorded' });
+        }
+      }
+    } else if (cr.status === 'rejected') {
+      logger.warn({ error: String(cr.reason) }, 'Crossref supplement failed');
       warnings.push('Could not check Crossref for extra papers right now.');
+    }
+
+    // Drop anything already on the profiles (by DOI, OpenAlex id or title + year).
+    try {
+      const dois = [...confirmed, ...possible].map((w) => w.doi).filter((d): d is string => Boolean(d));
+      const onProfile = await authorHasDois(authorIds, dois);
+      const seenTitles = new Set(works.map((w) => titleKey(w.title, w.year)));
+      const seenIds = new Set(works.map((w) => w.openalexId).filter(Boolean));
+      const isNew = (w: ScholarlyWork) =>
+        !(w.doi && onProfile.has(w.doi)) && !(w.openalexId && seenIds.has(w.openalexId)) && !seenTitles.has(titleKey(w.title, w.year));
+
+      crossrefExtras = mergeWorks(confirmed.filter(isNew));
+      const confirmedDois = new Set(crossrefExtras.map((w) => w.doi));
+      const confirmedTitles = new Set(crossrefExtras.map((w) => titleKey(w.title, w.year)));
+      // Strongest hints first: same institution on another profile, then the rest.
+      const rank = (w: ScholarlyWork) => (w.matchNote?.includes('institution') ? 0 : 1);
+      possible.sort((a, b) => rank(a) - rank(b));
+      possibleMatches = mergeWorks(
+        possible.filter((w) => isNew(w) && !(w.doi && confirmedDois.has(w.doi)) && !confirmedTitles.has(titleKey(w.title, w.year))),
+      ).slice(0, MAX_POSSIBLE);
+    } catch (err) {
+      logger.warn({ error: String(err) }, 'De-duplicating extra matches failed');
+      warnings.push('Could not check for extra papers right now.');
     }
   }
 
-  return { author, total: oa.total, page, works, crossrefExtras, warnings };
+  return { author, total: oa.total, page, works, crossrefExtras, possibleMatches, warnings };
 }

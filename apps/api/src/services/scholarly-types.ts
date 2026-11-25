@@ -13,6 +13,8 @@ export interface ScholarlyWork {
   citedByCount: number;
   openAccess: boolean;
   sources: ('openalex' | 'crossref')[];
+  /** Set on "possible matches": why the paper is offered but not confirmed. */
+  matchNote?: string;
 }
 
 export interface WorkFilters {

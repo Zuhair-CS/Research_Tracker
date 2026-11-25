@@ -133,9 +133,16 @@ export interface ScholarlyWork {
   openAccess: boolean;
   sources: ('openalex' | 'crossref')[];
   alreadyImported: boolean;
+  /** Only on "possible matches": why it is offered but not confirmed. */
+  matchNote?: string;
 }
 
 export const workKey = (w: Pick<ScholarlyWork, 'openalexId' | 'doi'>) => w.openalexId ?? `doi:${w.doi}`;
+
+/** Another OpenAlex profile that may be the same person. */
+export interface RelatedProfile extends ExternalAuthor {
+  reason: 'same-orcid' | 'same-name' | 'name-variant';
+}
 
 export interface PeopleResult {
   total: number;
@@ -151,6 +158,7 @@ export interface ResearcherWorks {
   perPage: number;
   works: ScholarlyWork[];
   crossrefExtras: ScholarlyWork[];
+  possibleMatches: ScholarlyWork[];
   linkedUser: LinkedUser | null;
   warnings: string[];
 }

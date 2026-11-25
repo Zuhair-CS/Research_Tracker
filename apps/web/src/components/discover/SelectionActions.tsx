@@ -10,10 +10,16 @@ interface Props {
   selected: ScholarlyWork[];
   /** When viewing one researcher's profile: enables "send whole profile". */
   author?: ExternalAuthor;
+  /** Other OpenAlex profiles of the same person that are merged into the view. */
+  alsoAuthorIds?: string[];
+  /** Papers on the profile(s) (main + merged), for the "whole profile" button. */
+  profileWorksCount?: number;
+  /** Ticked papers that are NOT on the profile(s): sent along with "whole profile". */
+  selectedExtras?: ScholarlyWork[];
   onDone: () => void;
 }
 
-/** "A. Pandey" and "Ashok Kumar Pandey" -> same family name and first initial. */
+/** Same rule as the server: same family name, and same first name (or same initial if one is abbreviated). */
 function looksLikeSamePerson(a: string, b: string): boolean {
   const titles = new Set(['dr', 'prof', 'professor', 'mr', 'mrs', 'ms', 'miss', 'er', 'sir', 'shri', 'smt']);
   const parts = (n: string) =>
@@ -25,7 +31,10 @@ function looksLikeSamePerson(a: string, b: string): boolean {
       .filter((t) => t && !titles.has(t));
   const x = parts(a);
   const y = parts(b);
-  return x.length > 0 && y.length > 0 && x[x.length - 1] === y[y.length - 1] && x[0]?.[0] === y[0]?.[0];
+  if (x.length === 0 || y.length === 0 || x[x.length - 1] !== y[y.length - 1]) return false;
+  if (x.length === 1 || y.length === 1) return true;
+  const [fx, fy] = [x[0] as string, y[0] as string];
+  return fx.length > 1 && fy.length > 1 ? fx === fy : fx[0] === fy[0];
 }
 
 const refOf = (w: ScholarlyWork) => ({ ...(w.openalexId ? { openalexId: w.openalexId } : {}), ...(w.doi ? { doi: w.doi } : {}) });
@@ -37,7 +46,7 @@ const refOf = (w: ScholarlyWork) => ({ ...(w.openalexId ? { openalexId: w.openal
  *    must approve before anything is added to their account.
  *  - Viewer: nothing (read-only).
  */
-export function SelectionActions({ selected, author, onDone }: Props) {
+export function SelectionActions({ selected, author, alsoAuthorIds = [], profileWorksCount, selectedExtras = [], onDone }: Props) {
   const { user } = useAuth();
   const departments = useDepartments();
   const isAdmin = user?.role === 'ADMIN';
@@ -121,7 +130,8 @@ export function SelectionActions({ selected, author, onDone }: Props) {
           researcherId,
           authorName: author?.name ?? 'Selected papers',
           ...(author ? { openalexAuthorId: author.id, authorInstitution: author.institutions[0] } : {}),
-          works: whole ? [] : selected.map(refOf),
+          ...(whole ? { wholeProfile: true, alsoAuthorIds } : {}),
+          works: (whole ? selectedExtras : selected).map(refOf),
           ...(message.trim() ? { message: message.trim() } : {}),
         },
       });
@@ -168,7 +178,9 @@ export function SelectionActions({ selected, author, onDone }: Props) {
       </button>
       {author && (
         <button className="btn primary" type="button" disabled={busy || !researcherId} onClick={() => void send(true)}>
-          Send whole profile ({Math.min(author.worksCount, 200).toLocaleString()} papers)
+          Send whole profile ({Math.min(profileWorksCount ?? author.worksCount, 200).toLocaleString()} papers
+          {alsoAuthorIds.length > 0 && ` from ${alsoAuthorIds.length + 1} profiles`}
+          {selectedExtras.length > 0 && ` + ${selectedExtras.length} ticked`})
         </button>
       )}
       <p className="muted small full">

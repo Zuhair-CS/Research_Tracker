@@ -59,6 +59,7 @@ export function WorkList({ works, selected, onToggle, emptyText = 'No papers fou
                   </span>
                 ))}
                 {w.alreadyImported && <span className="tag tag-ok">Imported</span>}
+                {w.matchNote && <span className="tag tag-warn">Unconfirmed: {w.matchNote}</span>}
               </div>
             </div>
           </li>

@@ -10,7 +10,7 @@ import { IdParam, optionalQuery } from '../schemas/common.js';
 import { lookupDoi } from '../services/crossref.js';
 import { importWorks } from '../services/importer.js';
 import { NotificationType, notify } from '../services/notifications.js';
-import { AUTHOR_ID, getAuthorWorks, getWorksByIds } from '../services/openalex.js';
+import { AUTHOR_ID, MAX_EXTRA_PROFILES, getAuthorWorks, getWorksByIds } from '../services/openalex.js';
 import type { ScholarlyWork, WorkRef } from '../services/scholarly-types.js';
 import { WorkRefSchema } from './discover.js';
 
@@ -58,14 +58,25 @@ const toSnapshot = (w: ScholarlyWork): SnapshotWork => ({
   citedByCount: w.citedByCount,
 });
 
-/** Fetch the offered papers from their sources (never trust titles sent by the browser). */
-async function buildSnapshot(authorId: string | undefined, refs: WorkRef[]): Promise<SnapshotWork[]> {
-  if (refs.length === 0) {
-    if (!authorId) throw badRequest('Select papers, or send the whole profile');
-    // Whole profile: the author's most recent MAX_WORKS papers.
-    const { works } = await getAuthorWorks(authorId, { sort: 'newest' }, 1, MAX_WORKS);
-    return works.map(toSnapshot);
+/**
+ * Fetch the offered papers from their sources (never trust titles sent by the browser).
+ * `profileIds` set = include the whole profile(s); `refs` = individually ticked papers.
+ */
+async function buildSnapshot(profileIds: string[], refs: WorkRef[]): Promise<SnapshotWork[]> {
+  const works = await fetchRefs(refs);
+  if (profileIds.length > 0) {
+    // Whole profile(s): the most recent MAX_WORKS papers.
+    works.push(...(await getAuthorWorks(profileIds, { sort: 'newest' }, 1, MAX_WORKS)).works);
   }
+  // Ticked papers come first, so they survive the MAX_WORKS cut; duplicates are dropped.
+  const seen = new Set<string>();
+  return works
+    .map(toSnapshot)
+    .filter((w) => !seen.has(w.key) && Boolean(seen.add(w.key)))
+    .slice(0, MAX_WORKS);
+}
+
+async function fetchRefs(refs: WorkRef[]): Promise<ScholarlyWork[]> {
   const ids = refs.map((r) => r.openalexId).filter((id): id is string => Boolean(id));
   const dois = refs.filter((r) => !r.openalexId && r.doi).map((r) => r.doi as string);
   const works: ScholarlyWork[] = [];
@@ -74,7 +85,7 @@ async function buildSnapshot(authorId: string | undefined, refs: WorkRef[]): Pro
     const d = await lookupDoi(doi).catch(() => null);
     if (d) works.push({ ...d, openalexId: null, citedByCount: 0, openAccess: false, sources: ['crossref'] });
   }
-  return works.map(toSnapshot);
+  return works;
 }
 
 const CreateBody = z.strictObject({
@@ -82,7 +93,10 @@ const CreateBody = z.strictObject({
   openalexAuthorId: z.string().regex(AUTHOR_ID).optional(),
   authorName: z.string().trim().min(1).max(200),
   authorInstitution: z.string().trim().max(300).optional(),
-  // Empty = "the whole OpenAlex profile".
+  // Other OpenAlex profiles of the same person, included with "whole profile".
+  alsoAuthorIds: z.array(z.string().regex(AUTHOR_ID)).max(MAX_EXTRA_PROFILES).default([]),
+  // Send every paper on the profile(s), plus any ticked `works`. Default: only when no works are ticked.
+  wholeProfile: z.boolean().optional(),
   works: z.array(WorkRefSchema).max(MAX_WORKS).default([]),
   message: z.string().trim().max(500).optional(),
 });
@@ -129,7 +143,11 @@ claimsRouter.post('/', requireRole('ADMIN'), externalLookupLimiter, async (req, 
     if (pending) throw conflict('A request for this profile is already waiting for this researcher');
   }
 
-  const works = await buildSnapshot(body.openalexAuthorId, body.works);
+  const whole = body.wholeProfile ?? body.works.length === 0;
+  if (whole && !body.openalexAuthorId) throw badRequest('Select papers, or send the whole profile');
+  if (body.alsoAuthorIds.length && !body.openalexAuthorId) throw badRequest('Other profiles need a main profile');
+  const profileIds = whole && body.openalexAuthorId ? [body.openalexAuthorId, ...body.alsoAuthorIds] : [];
+  const works = await buildSnapshot(profileIds, body.works);
   if (works.length === 0) throw badRequest('No papers were found to send');
 
   const claim = await prisma.$transaction(async (tx) => {
@@ -160,7 +178,13 @@ claimsRouter.post('/', requireRole('ADMIN'), externalLookupLimiter, async (req, 
         action: AuditAction.CLAIM_REQUEST,
         entityType: 'ClaimRequest',
         entityId: created.id,
-        after: { researcher: researcher.name, authorName: body.authorName, openalexAuthorId: body.openalexAuthorId, works: works.length },
+        after: {
+          researcher: researcher.name,
+          authorName: body.authorName,
+          openalexAuthorId: body.openalexAuthorId,
+          alsoAuthorIds: body.alsoAuthorIds,
+          works: works.length,
+        },
       },
       tx,
     );

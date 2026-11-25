@@ -8,7 +8,16 @@ import { currentUser, requireRole } from '../middleware/auth.js';
 import { externalLookupLimiter } from '../middleware/rate-limit.js';
 import { PublicationTypeSchema, optionalQuery } from '../schemas/common.js';
 import { importWorks } from '../services/importer.js';
-import { AUTHOR_ID, WORK_ID, getAuthorByOrcid, getInstitutionName, searchAuthors } from '../services/openalex.js';
+import {
+  AUTHOR_ID,
+  MAX_EXTRA_PROFILES,
+  WORK_ID,
+  findRelatedAuthors,
+  getAuthor,
+  getAuthorByOrcid,
+  getInstitutionName,
+  searchAuthors,
+} from '../services/openalex.js';
 import { getResearcherWorks, searchPublications } from '../services/scholarly-search.js';
 import type { ScholarlyWork } from '../services/scholarly-types.js';
 
@@ -44,7 +53,22 @@ const PeopleQuery = z.strictObject({
   page,
 });
 
-const ResearcherWorksQuery = z.strictObject({ ...WorkFiltersQuery, page, ownerId: optionalQuery(z.uuid()) });
+/** `?also=A1,A2`: other OpenAlex profiles of the same person to merge into the list. */
+const alsoProfiles = optionalQuery(z.string().max(400))
+  .transform((v) => (v ? v.split(',').filter(Boolean) : []))
+  .pipe(z.array(z.string().regex(AUTHOR_ID, 'Invalid OpenAlex author id')).max(MAX_EXTRA_PROFILES));
+
+const ResearcherWorksQuery = z.strictObject({ ...WorkFiltersQuery, page, ownerId: optionalQuery(z.uuid()), also: alsoProfiles });
+const AuthorIdParam = z.strictObject({ authorId: z.string().regex(AUTHOR_ID, 'Invalid OpenAlex author id') });
+
+/** Which of these OpenAlex profiles are already confirmed by a registered account. */
+async function linkedUsers(authorIds: string[]) {
+  const linked = await prisma.user.findMany({
+    where: { openalexAuthorId: { in: authorIds } },
+    select: { id: true, name: true, openalexAuthorId: true },
+  });
+  return new Map(linked.map((u) => [u.openalexAuthorId, { id: u.id, name: u.name }]));
+}
 
 const PublicationsQuery = z.strictObject({
   q: optionalQuery(z.string().trim().min(2).max(200)),
@@ -103,21 +127,25 @@ discoverRouter.get('/people', externalLookupLimiter, async (req, res) => {
     perPage: 25,
   });
   // Show which results are already linked to a registered account (helps admins send claim requests).
-  const linked = await prisma.user.findMany({
-    where: { openalexAuthorId: { in: result.authors.map((a) => a.id) } },
-    select: { id: true, name: true, openalexAuthorId: true },
-  });
-  const byAuthor = new Map(linked.map((u) => [u.openalexAuthorId, { id: u.id, name: u.name }]));
+  const byAuthor = await linkedUsers(result.authors.map((a) => a.id));
   res.json({ ...result, page: q.page, perPage: 25, authors: result.authors.map((a) => ({ ...a, linkedUser: byAuthor.get(a.id) ?? null })) });
 });
 
-/** One researcher's papers: OpenAlex profile + Crossref extras, with filters. */
+/** Other OpenAlex profiles that may be the same person (split profiles, other spellings). */
+discoverRouter.get('/people/:authorId/related', externalLookupLimiter, async (req, res) => {
+  const { authorId } = AuthorIdParam.parse(req.params);
+  const profiles = await findRelatedAuthors(await getAuthor(authorId));
+  const byAuthor = await linkedUsers(profiles.map((p) => p.id));
+  res.json({ profiles: profiles.map((p) => ({ ...p, linkedUser: byAuthor.get(p.id) ?? null })) });
+});
+
+/** One researcher's papers: OpenAlex profile(s) + Crossref extras + possible matches, with filters. */
 discoverRouter.get('/people/:authorId/works', externalLookupLimiter, async (req, res) => {
-  const { authorId } = z.strictObject({ authorId: z.string().regex(AUTHOR_ID, 'Invalid OpenAlex author id') }).parse(req.params);
+  const { authorId } = AuthorIdParam.parse(req.params);
   const q = ResearcherWorksQuery.parse(req.query);
   const me = currentUser(req);
   const result = await getResearcherWorks(
-    authorId,
+    [authorId, ...q.also.filter((id) => id !== authorId)],
     { yearFrom: q.yearFrom, yearTo: q.yearTo, type: q.type, openAccessOnly: q.oaOnly, sort: q.sort },
     q.page,
   );
@@ -130,6 +158,7 @@ discoverRouter.get('/people/:authorId/works', externalLookupLimiter, async (req,
     linkedUser,
     works: await markImported(result.works, ownerId),
     crossrefExtras: await markImported(result.crossrefExtras, ownerId),
+    possibleMatches: await markImported(result.possibleMatches, ownerId),
   });
 });
 

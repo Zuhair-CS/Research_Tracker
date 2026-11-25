@@ -20,7 +20,10 @@
     "build": "npm run build -w apps/api && npm run build -w apps/web",
     "start": "npm run start -w apps/api",
     "lint": "eslint .",
-    "typecheck": "npm run typecheck --workspaces"
+    "typecheck": "npm run typecheck --workspaces && tsc -p e2e",
+    "test": "npm run test -w apps/api",
+    "test:coverage": "npm run test:coverage -w apps/api",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
