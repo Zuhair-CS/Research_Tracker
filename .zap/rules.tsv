@@ -1,0 +1,7 @@
+# OWASP ZAP baseline rules (tab-separated: <RULE_ID>\t<ACTION>\t<DESCRIPTION>)
+# Reviewed from Run 45540893339 zap-baseline-report (0 High, 0 Medium, 1 Low, 8 Informational).
+10027	IGNORE	(Information Disclosure - Suspicious Comments: false positive on minified Vite bundle)
+10049	IGNORE	(Storable/Cacheable Content: intentional Cache-Control for hashed /assets and index.html)
+10109	IGNORE	(Modern Web Application: informational SPA detection)
+90004	IGNORE	(Cross-Origin-Embedder-Policy Header Missing: COEP intentionally omitted for SPA compatibility)
+90005	IGNORE	(Sec-Fetch-* Header is Missing: ZAP spider request header, not a server response issue)

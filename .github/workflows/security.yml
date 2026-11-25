@@ -244,9 +244,9 @@ jobs:
           target: ${{ env.APP_URL }}
           cmd_options: "-a" # include alpha passive rules
           allow_issue_writing: false # report via artifact, don't open GitHub issues
-          fail_action: false # set to true once false positives are listed in .zap/rules.tsv
+          fail_action: true
           artifact_name: zap-baseline-report
-          # rules_file_name: .zap/rules.tsv # uncomment after creating the file
+          rules_file_name: .zap/rules.tsv
 
       - name: Upload application log
         if: always()
