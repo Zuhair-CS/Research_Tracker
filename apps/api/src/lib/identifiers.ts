@@ -24,6 +24,20 @@ export function normalizeDoi(input: string): string | null {
   return trimmed.toLowerCase();
 }
 
+function compactOrcid(input: string): string {
+  return input
+    .trim()
+    .toUpperCase()
+    .replace(/^HTTPS?:\/\/(WWW\.)?ORCID\.ORG\//, '')
+    .replace(/[\s\p{Pd}]/gu, ''); // \p{Pd} = any kind of dash
+}
+
+/** True when input looks like a 16-character ORCID iD (check digit not yet verified). */
+export function isOrcidQuery(input: string | undefined): boolean {
+  if (!input) return false;
+  return /^\d{15}[\dX]$/.test(compactOrcid(input));
+}
+
 /**
  * Squeeze user input down to the 16 ORCID characters: drops the orcid.org
  * URL, spaces, and any kind of dash (people paste iDs with "–" or spaces).
@@ -31,11 +45,7 @@ export function normalizeDoi(input: string): string | null {
  * The check digit is NOT verified here (see normalizeOrcid).
  */
 export function orcidShape(input: string): string | null {
-  const compact = input
-    .trim()
-    .toUpperCase()
-    .replace(/^HTTPS?:\/\/(WWW\.)?ORCID\.ORG\//, '')
-    .replace(/[\s\p{Pd}]/gu, ''); // \p{Pd} = any kind of dash
+  const compact = compactOrcid(input);
   if (!/^\d{15}[\dX]$/.test(compact)) return null;
   return `${compact.slice(0, 4)}-${compact.slice(4, 8)}-${compact.slice(8, 12)}-${compact.slice(12)}`;
 }

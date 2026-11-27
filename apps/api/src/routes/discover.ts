@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { AuditAction, writeAudit } from '../lib/audit.js';
 import { prisma } from '../lib/db.js';
 import { HttpError, badRequest } from '../lib/errors.js';
-import { normalizeDoi, normalizeOrcid, orcidShape } from '../lib/identifiers.js';
+import { isOrcidQuery, normalizeDoi, normalizeOrcid } from '../lib/identifiers.js';
 import { currentUser, requireRole } from '../middleware/auth.js';
 import { externalLookupLimiter } from '../middleware/rate-limit.js';
 import { PublicationTypeSchema, optionalQuery } from '../schemas/common.js';
@@ -123,41 +123,44 @@ const orcidToWork = (w: OrcidWork): ScholarlyWork => ({
   sources: ['orcid'],
 });
 
+async function searchPeopleByOrcid(rawQuery: string, onlyOurInstitution: boolean, ownerId: string | undefined) {
+  const orcidId = normalizeOrcid(rawQuery);
+  // Looks like an ORCID iD but the check digit is wrong: almost always a typo.
+  if (!orcidId) {
+    throw new HttpError(400, 'INVALID_ORCID', 'This ORCID iD is not valid. Check it for a typo: the last character is a check digit (0-9 or X).');
+  }
+  const author = await getAuthorByOrcid(orcidId);
+  if (author) {
+    const byAuthor = await linkedUsers([author.id]);
+    return { total: 1, page: 1, perPage: 25, authors: [{ ...author, linkedUser: byAuthor.get(author.id) ?? null }] };
+  }
+  // Many researchers (especially with few papers) have an ORCID iD that no
+  // OpenAlex profile is linked to. Fall back to the public ORCID record, and
+  // suggest OpenAlex profiles with the same name.
+  const record = await fetchOrcidRecord(orcidId);
+  if (!record) throw new HttpError(404, 'ORCID_NOT_FOUND', 'No ORCID record exists for this iD.');
+  const similar = record.name
+    ? await searchAuthors({ q: record.name, onlyOurInstitution, hasOrcid: false, sort: 'relevance', page: 1, perPage: 25 })
+    : { total: 0, authors: [] };
+  const byAuthor = await linkedUsers(similar.authors.map((a) => a.id));
+  return {
+    total: similar.authors.length, // first 25 same-name suggestions only (no paging in this mode)
+    page: 1,
+    perPage: 25,
+    authors: similar.authors.map((a) => ({ ...a, linkedUser: byAuthor.get(a.id) ?? null })),
+    orcidRecord: { orcidId, name: record.name, works: await markImported(record.works.map(orcidToWork), ownerId) },
+  };
+}
+
 /** People search (OpenAlex). Empty query + our institution = browse all its researchers. */
 discoverRouter.get('/people', externalLookupLimiter, async (req, res) => {
   const q = PeopleQuery.parse(req.query);
   const me = currentUser(req);
 
   // Search by ORCID iD.
-  if (q.q && orcidShape(q.q)) {
-    const orcidId = normalizeOrcid(q.q);
-    // Looks like an ORCID iD but the check digit is wrong: almost always a typo.
-    if (!orcidId) {
-      throw new HttpError(400, 'INVALID_ORCID', 'This ORCID iD is not valid. Check it for a typo: the last character is a check digit (0-9 or X).');
-    }
-    const author = await getAuthorByOrcid(orcidId);
-    if (author) {
-      const byAuthor = await linkedUsers([author.id]);
-      res.json({ total: 1, page: 1, perPage: 25, authors: [{ ...author, linkedUser: byAuthor.get(author.id) ?? null }] });
-      return;
-    }
-    // Many researchers (especially with few papers) have an ORCID iD that no
-    // OpenAlex profile is linked to. Fall back to the public ORCID record, and
-    // suggest OpenAlex profiles with the same name.
-    const record = await fetchOrcidRecord(orcidId);
-    if (!record) throw new HttpError(404, 'ORCID_NOT_FOUND', 'No ORCID record exists for this iD.');
-    const similar = record.name
-      ? await searchAuthors({ q: record.name, onlyOurInstitution: q.scope === 'institution', hasOrcid: false, sort: 'relevance', page: 1, perPage: 25 })
-      : { total: 0, authors: [] };
-    const byAuthor = await linkedUsers(similar.authors.map((a) => a.id));
+  if (isOrcidQuery(q.q)) {
     const ownerId = me.role === 'RESEARCHER' ? me.id : undefined;
-    res.json({
-      total: similar.authors.length, // first 25 same-name suggestions only (no paging in this mode)
-      page: 1,
-      perPage: 25,
-      authors: similar.authors.map((a) => ({ ...a, linkedUser: byAuthor.get(a.id) ?? null })),
-      orcidRecord: { orcidId, name: record.name, works: await markImported(record.works.map(orcidToWork), ownerId) },
-    });
+    res.json(await searchPeopleByOrcid(q.q as string, q.scope === 'institution', ownerId));
     return;
   }
   if (!q.q && q.scope === 'all') throw badRequest('Type a name, or limit the search to your university to browse it');
