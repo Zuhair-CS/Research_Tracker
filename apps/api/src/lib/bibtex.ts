@@ -201,7 +201,7 @@ export function parseBibtex(input: string): BibParseResult {
       const key = keyMatch[0];
       i += key.length;
       skipSpace();
-      const fields: Record<string, string> = {};
+      const fieldMap = new Map<string, string>();
       if (text[i] === ',') {
         i++;
         for (;;) {
@@ -217,7 +217,11 @@ export function parseBibtex(input: string): BibParseResult {
           skipSpace();
           if (text[i] !== '=') throw new BibSyntaxError(`Expected "=" after "${name[0]}"`, i);
           i++;
-          fields[name[0].toLowerCase()] = readValue();
+          const fieldName = name[0].toLowerCase();
+          const fieldValue = readValue();
+          if (fieldName !== '__proto__' && fieldName !== 'constructor' && fieldName !== 'prototype') {
+            fieldMap.set(fieldName, fieldValue);
+          }
           skipSpace();
           if (i >= text.length) throw new BibSyntaxError(`The entry "${key}" is never closed`, at, true);
           if (text[i] === ',') i++;
@@ -236,7 +240,7 @@ export function parseBibtex(input: string): BibParseResult {
         errors.push({ line: lineAt(at), message: `Only the first ${BIBTEX_LIMITS.maxEntries} entries are read` });
         break;
       }
-      entries.push({ line: lineAt(at), type, key, fields });
+      entries.push({ line: lineAt(at), type, key, fields: Object.fromEntries(fieldMap) });
     } catch (err) {
       if (!(err instanceof BibSyntaxError)) throw err;
       errors.push({ line: lineAt(err.at), message: err.message });

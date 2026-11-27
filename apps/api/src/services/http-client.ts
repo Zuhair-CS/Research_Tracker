@@ -92,13 +92,16 @@ export function apiUrl(base: string, ...segments: string[]): URL {
 
 /** Strip any HTML/JATS markup (e.g. <i>, <sub>) from titles so we only store plain text. */
 export function plainText(value: string): string {
-  return value
-    .replace(/<[^>]*>/g, '')
+  let text = value
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/&amp;/g, '&');
+  let prev: string;
+  do {
+    prev = text;
+    text = text.replace(/<[^>]*>/g, '');
+  } while (text !== prev);
+  return text.replace(/\s+/g, ' ').trim();
 }
