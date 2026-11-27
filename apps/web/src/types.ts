@@ -49,7 +49,7 @@ export interface Publication {
   doi: string | null;
   type: PublicationType;
   pdfUrl: string | null;
-  source: 'MANUAL' | 'CROSSREF' | 'ORCID';
+  source: 'MANUAL' | 'CROSSREF' | 'ORCID' | 'OPENALEX' | 'BIBTEX';
   department: Department;
   owner: { id: string; name: string };
   createdAt: string;
@@ -131,7 +131,7 @@ export interface ScholarlyWork {
   pdfUrl: string | null;
   citedByCount: number;
   openAccess: boolean;
-  sources: ('openalex' | 'crossref')[];
+  sources: ('openalex' | 'crossref' | 'orcid')[];
   alreadyImported: boolean;
   /** Only on "possible matches": why it is offered but not confirmed. */
   matchNote?: string;
@@ -149,6 +149,8 @@ export interface PeopleResult {
   page: number;
   perPage: number;
   authors: ExternalAuthor[];
+  /** Set when an ORCID iD was searched that no OpenAlex profile is linked to. */
+  orcidRecord?: { orcidId: string; name: string; works: ScholarlyWork[] };
 }
 
 export interface ResearcherWorks {
@@ -210,4 +212,26 @@ export interface AppNotification {
   link: string | null;
   readAt: string | null;
   createdAt: string;
+}
+
+// ---------------------------------------------------------------- BibTeX import
+export interface BibCandidate {
+  index: number;
+  line: number;
+  key: string;
+  title: string;
+  authors: string[];
+  venue: string | null;
+  year: number | null;
+  doi: string | null;
+  type: PublicationType;
+  pdfUrl: string | null;
+  status: 'new' | 'duplicate' | 'invalid';
+  reason?: string;
+}
+
+export interface BibAnalysis {
+  candidates: BibCandidate[];
+  errors: { line: number; message: string }[];
+  stats: { entries: number; new: number; duplicate: number; invalid: number };
 }

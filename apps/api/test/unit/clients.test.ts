@@ -13,7 +13,7 @@ import {
   searchAuthors,
   searchWorks,
 } from '../../src/services/openalex.js';
-import { fetchWorkDetails, fetchWorkSummaries, mapBulkWorks, mapOrcidType, mapWorksSummary } from '../../src/services/orcid.js';
+import { fetchOrcidRecord, fetchWorkDetails, fetchWorkSummaries, mapBulkWorks, mapOrcidType, mapWorksSummary } from '../../src/services/orcid.js';
 import { affiliationMatches, mergeWorks } from '../../src/services/scholarly-search.js';
 import type { ScholarlyWork } from '../../src/services/scholarly-types.js';
 
@@ -242,6 +242,14 @@ describe('ORCID client', () => {
     });
     expect(works).toEqual([{ putCode: '7', title: 'X', authors: [], venue: null, year: null, doi: '10.5555/self', type: 'OTHER' }]);
     expect(mapWorksSummary({})).toEqual([]);
+  });
+
+  it('reads the public name, preferring the published "credit name", and handles hidden names', async () => {
+    apis.on(when(ORCID, '/v3.0/0000-0002-1825-0097/works', { body: { group: [] } }));
+    apis.on(when(ORCID, '/v3.0/0000-0002-1825-0097/personal-details', { body: { name: { 'given-names': { value: 'Josiah' }, 'family-name': { value: 'Carberry' }, 'credit-name': { value: 'J. S. Carberry' } } } }));
+    expect(await fetchOrcidRecord('0000-0002-1825-0097')).toEqual({ orcidId: '0000-0002-1825-0097', name: 'J. S. Carberry', works: [] });
+    apis.on(when(ORCID, '/v3.0/0000-0002-1825-0097/personal-details', { body: { name: null } }));
+    expect((await fetchOrcidRecord('0000-0002-1825-0097'))?.name).toBe('');
   });
 
   it('skips error entries in bulk responses', () => {

@@ -5,6 +5,8 @@ interface Props {
   works: ScholarlyWork[];
   selected?: Set<string>;
   onToggle?: (key: string) => void;
+  /** Which works may be ticked (default: all not yet imported). */
+  canSelect?: (w: ScholarlyWork) => boolean;
   emptyText?: string;
 }
 
@@ -14,7 +16,7 @@ const fmt = (n: number) => n.toLocaleString();
  * Google-Scholar-style result list: one entry per paper, with the sources it
  * was found in. Text is rendered by React (escaped), links are https only.
  */
-export function WorkList({ works, selected, onToggle, emptyText = 'No papers found.' }: Props) {
+export function WorkList({ works, selected, onToggle, canSelect = () => true, emptyText = 'No papers found.' }: Props) {
   if (works.length === 0) return <p className="muted empty-state">{emptyText}</p>;
   return (
     <ul className="work-list">
@@ -27,7 +29,7 @@ export function WorkList({ works, selected, onToggle, emptyText = 'No papers fou
                 type="checkbox"
                 aria-label={`Select ${w.title}`}
                 checked={selected?.has(key) ?? false}
-                disabled={w.alreadyImported}
+                disabled={w.alreadyImported || !canSelect(w)}
                 onChange={() => onToggle(key)}
               />
             )}
@@ -58,7 +60,7 @@ export function WorkList({ works, selected, onToggle, emptyText = 'No papers fou
                 {w.openAccess && <span className="tag tag-ok">Open access</span>}
                 {w.sources.map((s) => (
                   <span key={s} className={`tag source-${s}${s === 'openalex' ? ' tag-accent' : ''}`}>
-                    {s === 'openalex' ? 'OpenAlex' : 'Crossref'}
+                    {s === 'openalex' ? 'OpenAlex' : s === 'orcid' ? 'ORCID' : 'Crossref'}
                   </span>
                 ))}
                 {w.alreadyImported && (

@@ -28,6 +28,12 @@ export function PublicationsPage() {
   const page = Number(params.get('page') ?? '1') || 1;
   const activeFilterCount = FILTER_KEYS.filter((k) => k !== 'sort' && Boolean(filters[k])).length;
 
+  // A researcher with no publications yet is offered the quickest ways to fill their profile.
+  const { data: mine } = useAsync(
+    () => (user?.role === 'RESEARCHER' ? api<Page<Publication>>('/publications', { query: { mine: true, pageSize: 1 } }) : Promise.resolve(null)),
+    [user?.role],
+  );
+
   const { data, error, loading, reload } = useAsync(
     () => api<Page<Publication>>('/publications', { query: { ...filters, page, pageSize: 20 } }),
     [params.toString()],
@@ -86,6 +92,30 @@ export function PublicationsPage() {
           )}
         </div>
       </div>
+
+      {mine?.total === 0 && (
+        <div className="card get-started" role="region" aria-label="Get started">
+          <div>
+            <h2 className="small-heading">Get started: bring in your publications</h2>
+            <p className="muted small">
+              Your profile is empty. The fastest way to fill it is to upload your Google Scholar export (it includes papers that open
+              databases do not have). You can also import from ORCID or add papers one by one.
+            </p>
+          </div>
+          <div className="actions">
+            <Link className="btn primary" to="/import/scholar">
+              <FileTextIcon size={15} />
+              <span>Import from Google Scholar</span>
+            </Link>
+            <Link className="btn" to="/orcid">
+              Import from ORCID
+            </Link>
+            <Link className="btn ghost" to="/publications/new">
+              Add one by hand
+            </Link>
+          </div>
+        </div>
+      )}
 
       <form className="card filters" onSubmit={onSearch} key={params.toString()} aria-label="Search and filter">
         <label className="grow">

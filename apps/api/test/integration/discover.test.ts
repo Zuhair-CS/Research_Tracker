@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MAIN, ORCID_MAIN, UPES, installCatalog } from '../helpers/catalog.js';
-import { CROSSREF, OPENALEX, installFakeApis, when } from '../helpers/fake-apis.js';
+import { CROSSREF, OPENALEX, ORCID, installFakeApis, when } from '../helpers/fake-apis.js';
 import { createPublication, prisma, resetDb, type Fixtures } from '../helpers/db.js';
 import { loginAll, type Client } from '../helpers/http.js';
 
@@ -52,8 +52,44 @@ describe('config and people search', () => {
   it('looks a person up directly by ORCID iD', async () => {
     const res = await viewer.get(`/api/discover/people?q=https://orcid.org/${ORCID_MAIN}`).expect(200);
     expect(res.body.total).toBe(1);
-    const none = await viewer.get('/api/discover/people?q=0000-0001-5109-3700').expect(200);
-    expect(none.body).toMatchObject({ total: 0, authors: [] });
+  });
+
+  it('rejects an ORCID iD with a wrong check digit instead of searching it as a name', async () => {
+    const res = await viewer.get('/api/discover/people?q=0000-0002-1825-0098').expect(400);
+    expect(res.body.error.code).toBe('INVALID_ORCID');
+    expect(apis.calls).toHaveLength(0);
+  });
+
+  it('falls back to the ORCID record when no OpenAlex profile has the iD', async () => {
+    const id = '0000-0001-5109-3700'; // valid, but on no OpenAlex profile in the catalogue
+    apis.on(when(ORCID, `/v3.0/${id}/personal-details`, { body: { name: { 'given-names': { value: 'Aisha' }, 'family-name': { value: 'Rahman' }, 'credit-name': null } } }));
+    apis.on(
+      when(ORCID, `/v3.0/${id}/works`, {
+        body: {
+          group: [
+            { 'work-summary': [{ 'put-code': 1, title: { title: { value: 'On ORCID only' } }, type: 'journal-article', 'publication-date': { year: { value: '2020' } }, 'external-ids': { 'external-id': [{ 'external-id-type': 'doi', 'external-id-value': '10.5555/W1', 'external-id-relationship': 'self' }] } }] },
+            { 'work-summary': [{ 'put-code': 2, title: { title: { value: 'No DOI here' } }, type: 'book' }] },
+          ],
+        },
+      }),
+    );
+    await createPublication(fx.users.researcher.id, fx.departments.cs.id, { doi: '10.5555/w1' });
+
+    // Pasted with spaces and an en dash: still recognised.
+    const res = await aisha.get(`/api/discover/people?q=${encodeURIComponent('0000 0001–5109 3700')}`).expect(200);
+    expect(res.body.orcidRecord).toMatchObject({ orcidId: id, name: 'Aisha Rahman' });
+    expect(res.body.orcidRecord.works.map((w: { title: string; sources: string[]; alreadyImported: boolean }) => [w.title, w.sources, w.alreadyImported])).toEqual([
+      ['On ORCID only', ['orcid'], true],
+      ['No DOI here', ['orcid'], false],
+    ]);
+    // Same-name OpenAlex profiles are suggested.
+    expect(res.body.authors.map((a: { name: string }) => a.name)).toContain('Aisha Rahman');
+  });
+
+  it('404s an iD with no ORCID record', async () => {
+    apis.on(when(ORCID, '/v3.0/0000-0001-5109-3700/personal-details', { status: 404 }));
+    const res = await viewer.get('/api/discover/people?q=0000-0001-5109-3700').expect(404);
+    expect(res.body.error.code).toBe('ORCID_NOT_FOUND');
   });
 
   it('validates the query', async () => {

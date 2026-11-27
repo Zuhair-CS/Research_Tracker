@@ -13,6 +13,7 @@ import { corsAllowList, permissionsPolicy, securityHeaders } from './middleware/
 import { sessionMiddleware } from './middleware/session.js';
 import { adminRouter } from './routes/admin.js';
 import { authRouter } from './routes/auth.js';
+import { bibtexRouter } from './routes/bibtex.js';
 import { healthRouter } from './routes/health.js';
 import { claimsRouter } from './routes/claims.js';
 import { discoverRouter } from './routes/discover.js';
@@ -66,6 +67,7 @@ export function createApp(): Express {
   api.use('/publications', publicationsRouter);
   api.use('/orcid', orcidRouter);
   api.use('/discover', discoverRouter);
+  api.use('/import/bibtex', bibtexRouter);
   api.use('/claims', claimsRouter);
   api.use('/notifications', notificationsRouter);
   api.use('/reports', reportsRouter);

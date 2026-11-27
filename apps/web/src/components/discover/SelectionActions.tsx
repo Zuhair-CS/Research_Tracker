@@ -17,6 +17,8 @@ interface Props {
   profileWorksCount?: number;
   /** Ticked papers that are NOT on the profile(s): sent along with "whole profile". */
   selectedExtras?: ScholarlyWork[];
+  /** Whose papers these are, when there is no OpenAlex profile (e.g. an ORCID record). */
+  personName?: string;
   onDone: () => void;
 }
 
@@ -47,7 +49,8 @@ const refOf = (w: ScholarlyWork) => ({ ...(w.openalexId ? { openalexId: w.openal
  *    must approve before anything is added to their account.
  *  - Viewer: nothing (read-only).
  */
-export function SelectionActions({ selected, author, alsoAuthorIds = [], profileWorksCount, selectedExtras = [], onDone }: Props) {
+export function SelectionActions({ selected, author, alsoAuthorIds = [], profileWorksCount, selectedExtras = [], personName, onDone }: Props) {
+  const who = author?.name ?? personName;
   const { user } = useAuth();
   const departments = useDepartments();
   const isAdmin = user?.role === 'ADMIN';
@@ -128,7 +131,7 @@ export function SelectionActions({ selected, author, alsoAuthorIds = [], profile
   }
 
   // Admin: suggest accounts whose name looks like the profile's name first.
-  const suggested = author ? (researchers ?? []).filter((r) => looksLikeSamePerson(r.name, author.name)) : [];
+  const suggested = who ? (researchers ?? []).filter((r) => looksLikeSamePerson(r.name, who)) : [];
   const others = (researchers ?? []).filter((r) => !suggested.includes(r));
   const send = (whole: boolean) =>
     run(async () => {
@@ -136,7 +139,7 @@ export function SelectionActions({ selected, author, alsoAuthorIds = [], profile
         method: 'POST',
         body: {
           researcherId,
-          authorName: author?.name ?? 'Selected papers',
+          authorName: who || 'Selected papers',
           ...(author ? { openalexAuthorId: author.id, authorInstitution: author.institutions[0] } : {}),
           ...(whole ? { wholeProfile: true, alsoAuthorIds } : {}),
           works: (whole ? selectedExtras : selected).map(refOf),

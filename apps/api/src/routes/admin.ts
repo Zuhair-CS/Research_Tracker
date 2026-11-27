@@ -137,8 +137,8 @@ adminRouter.post('/users/:id/access', async (req, res) => {
       approved
         ? {
             type: NotificationType.ACCESS_APPROVED,
-            message: `Your ${before.pendingResearcherType.toLowerCase()} access was approved. You can now add and import publications.`,
-            link: '/',
+            message: `Your ${before.pendingResearcherType.toLowerCase()} access was approved. Start by importing your Google Scholar list, or add publications yourself.`,
+            link: '/import/scholar',
           }
         : { type: NotificationType.ACCESS_REJECTED, message: 'Your researcher access request was not approved. You keep read-only access.' },
       tx,

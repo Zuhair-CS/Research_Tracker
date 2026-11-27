@@ -12,6 +12,7 @@ import { FindResearchPage } from './pages/FindResearchPage';
 import { LoginPage } from './pages/LoginPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { OrcidPage } from './pages/OrcidPage';
+import { ScholarImportPage } from './pages/ScholarImportPage';
 import { PublicationFormPage } from './pages/PublicationFormPage';
 import { PublicationsPage } from './pages/PublicationsPage';
 import { SignupPage } from './pages/SignupPage';
@@ -33,6 +34,7 @@ createRoot(document.getElementById('root') as HTMLElement).render(
             <Route path="/publications/new" element={<RequireAuth roles={['RESEARCHER']}><PublicationFormPage /></RequireAuth>} />
             <Route path="/publications/:id/edit" element={<RequireAuth roles={['RESEARCHER', 'ADMIN']}><PublicationFormPage /></RequireAuth>} />
             <Route path="/orcid" element={<RequireAuth roles={['RESEARCHER']}><OrcidPage /></RequireAuth>} />
+            <Route path="/import/scholar" element={<RequireAuth roles={['RESEARCHER']}><ScholarImportPage /></RequireAuth>} />
             <Route path="/find" element={<RequireAuth><FindResearchPage /></RequireAuth>} />
             <Route path="/find-researcher" element={<Navigate to="/find" replace />} />
             <Route path="/claims" element={<RequireAuth roles={['ADMIN', 'RESEARCHER']}><ClaimsPage /></RequireAuth>} />

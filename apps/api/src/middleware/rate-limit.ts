@@ -46,6 +46,19 @@ export const apiLimiter = rateLimit({
 });
 
 /**
+ * File uploads (BibTeX import): parsing a large file costs CPU, so each user
+ * may upload at most 30 files per 15 minutes (preview + import count separately).
+ */
+export const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => req.user?.id ?? 'anonymous',
+  message,
+});
+
+/**
  * DOI and ORCID look-ups make our server call external APIs. Limit them per
  * user so one account cannot use our server to flood Crossref or ORCID.
  */

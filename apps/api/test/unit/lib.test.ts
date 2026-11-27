@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { csvCell, toCsv } from '../../src/lib/csv.js';
 import { HttpError, badGateway, badRequest, conflict, forbidden, notFound, unauthorized } from '../../src/lib/errors.js';
-import { normalizeDoi, normalizeOrcid, orcidChecksumValid } from '../../src/lib/identifiers.js';
+import { normalizeDoi, normalizeOrcid, orcidChecksumValid, orcidShape } from '../../src/lib/identifiers.js';
 import { nameParts, namesMatch, normalizeText, titleKey } from '../../src/lib/names.js';
 import { hashPassword, verifyAgainstDummy, verifyPassword } from '../../src/lib/password.js';
 
@@ -33,6 +33,18 @@ describe('normalizeOrcid', () => {
     expect(normalizeOrcid('0000-0002-1825-0097')).toBe('0000-0002-1825-0097');
     expect(normalizeOrcid('https://orcid.org/0000-0002-1694-233x')).toBe('0000-0002-1694-233X');
     expect(normalizeOrcid('http://www.orcid.org/0000-0002-1825-0097')).toBe('0000-0002-1825-0097');
+  });
+
+  it('accepts iDs pasted with spaces, other dashes or no dashes', () => {
+    expect(normalizeOrcid('0000 0002 1825 0097')).toBe('0000-0002-1825-0097');
+    expect(normalizeOrcid('0000–0002—1825‐0097')).toBe('0000-0002-1825-0097');
+    expect(normalizeOrcid('000000021694233x')).toBe('0000-0002-1694-233X');
+  });
+
+  it('tells "ORCID-shaped" input apart from names, regardless of the check digit', () => {
+    expect(orcidShape('0000-0002-1825-0098')).toBe('0000-0002-1825-0098');
+    expect(orcidShape('Ashok Pandey')).toBeNull();
+    expect(orcidShape('0000-0002-1825')).toBeNull();
   });
 
   it('rejects a wrong check digit or format', () => {

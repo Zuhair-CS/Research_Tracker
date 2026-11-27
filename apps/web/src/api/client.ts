@@ -47,19 +47,22 @@ export function toQueryString(query: Query = {}): string {
 interface Options {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
+  /** Send plain text instead of JSON (used for file uploads such as BibTeX). */
+  text?: string;
   query?: Query;
 }
 
-export async function api<T>(path: string, { method = 'GET', body, query }: Options = {}, retried = false): Promise<T> {
+export async function api<T>(path: string, { method = 'GET', body, text, query }: Options = {}, retried = false): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (text !== undefined) headers['Content-Type'] = 'text/plain; charset=utf-8';
   if (method !== 'GET') headers['X-CSRF-Token'] = await ensureCsrfToken();
 
   const res = await fetch(`/api${path}${toQueryString(query)}`, {
     method,
     headers,
     credentials: 'same-origin',
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: text ?? (body === undefined ? undefined : JSON.stringify(body)),
   });
 
   if (res.status === 204) return undefined as T;
@@ -72,7 +75,7 @@ export async function api<T>(path: string, { method = 'GET', body, query }: Opti
     // The session may have expired and taken its CSRF token with it: fetch a new one and retry once.
     if (err.code === 'CSRF_INVALID' && !retried) {
       csrfToken = null;
-      return api<T>(path, { method, body, query }, true);
+      return api<T>(path, { method, body, text, query }, true);
     }
     throw new ApiError(res.status, err.code, err.message, err.details);
   }

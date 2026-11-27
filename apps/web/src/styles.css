@@ -1926,3 +1926,33 @@ table.compact td:last-child {
     gap: 0.3rem;
   }
 }
+
+/* ---------------------------------------------------------------- Scholar (BibTeX) import */
+.small-heading { font-size: 1rem; margin: 0 0 0.5rem; }
+.steps { margin: 0 0 0.75rem; padding-left: 1.25rem; display: grid; gap: 0.35rem; color: var(--text-secondary); font-size: 0.9rem; }
+.steps code { font-family: var(--font-mono); font-size: 0.85em; }
+/* The real <input type="file"> sits invisibly on top of a button-styled label, so it stays keyboard and screen-reader accessible. */
+.file-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+  padding: 0.55rem 1rem;
+  border: 1px dashed var(--accent-border);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.file-picker:hover { background: var(--hover); }
+.file-picker:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.file-picker input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.title-cell .muted.small { display: block; margin-top: 0.15rem; }
+.muted.small.block { display: block; margin-top: 0.2rem; }
+
+/* Prompt for researchers whose profile is still empty */
+.get-started { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; border-left: 4px solid var(--accent); }
+.get-started p { margin: 0; max-width: 60ch; }

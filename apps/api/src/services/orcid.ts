@@ -146,3 +146,35 @@ export async function fetchWorkDetails(orcidId: string, putCodes: string[]): Pro
   if (status === 404) throw notFound('ORCID record not found');
   return mapBulkWorks(body);
 }
+
+const PersonalDetails = z.object({
+  name: z
+    .object({
+      'given-names': Value,
+      'family-name': Value,
+      'credit-name': Value,
+    })
+    .nullish(),
+});
+
+export interface OrcidRecord {
+  orcidId: string;
+  /** The published name; empty when the person keeps it private. */
+  name: string;
+  works: OrcidWork[];
+}
+
+/**
+ * The public ORCID record: name and work list. Returns null when the iD has
+ * no record. Used when OpenAlex has no profile linked to an ORCID iD (common
+ * for researchers with few papers), so a search by iD still finds the person.
+ */
+export async function fetchOrcidRecord(orcidId: string): Promise<OrcidRecord | null> {
+  const { status, body } = await fetchJson(apiUrl(config.ORCID_API_BASE, orcidId, 'personal-details'), {});
+  if (status === 404) return null;
+  const name = PersonalDetails.parse(body).name;
+  const given = name?.['given-names']?.value ?? '';
+  const family = name?.['family-name']?.value ?? '';
+  const display = name?.['credit-name']?.value || [given, family].filter(Boolean).join(' ');
+  return { orcidId, name: plainText(display), works: await fetchWorkSummaries(orcidId) };
+}

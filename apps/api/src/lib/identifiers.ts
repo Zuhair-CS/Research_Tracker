@@ -24,19 +24,30 @@ export function normalizeDoi(input: string): string | null {
   return trimmed.toLowerCase();
 }
 
-const ORCID_PATTERN = /^(\d{4})-(\d{4})-(\d{4})-(\d{3}[\dX])$/;
-
 /**
- * Accepts "0000-0002-1825-0097" or "https://orcid.org/0000-0002-1825-0097"
- * and returns the bare iD if the format AND the check digit are valid.
+ * Squeeze user input down to the 16 ORCID characters: drops the orcid.org
+ * URL, spaces, and any kind of dash (people paste iDs with "–" or spaces).
+ * Returns "0000-0002-1825-0097" format, or null if it is not ORCID-shaped.
+ * The check digit is NOT verified here (see normalizeOrcid).
  */
-export function normalizeOrcid(input: string): string | null {
-  const bare = input
+export function orcidShape(input: string): string | null {
+  const compact = input
     .trim()
     .toUpperCase()
-    .replace(/^HTTPS?:\/\/(WWW\.)?ORCID\.ORG\//, '');
-  if (!ORCID_PATTERN.test(bare)) return null;
-  return orcidChecksumValid(bare) ? bare : null;
+    .replace(/^HTTPS?:\/\/(WWW\.)?ORCID\.ORG\//, '')
+    .replace(/[\s\p{Pd}]/gu, ''); // \p{Pd} = any kind of dash
+  if (!/^\d{15}[\dX]$/.test(compact)) return null;
+  return `${compact.slice(0, 4)}-${compact.slice(4, 8)}-${compact.slice(8, 12)}-${compact.slice(12)}`;
+}
+
+/**
+ * Accepts "0000-0002-1825-0097", "https://orcid.org/0000-0002-1825-0097" or
+ * the same with spaces / other dashes, and returns the bare iD if the format
+ * AND the check digit are valid (the last character may be X).
+ */
+export function normalizeOrcid(input: string): string | null {
+  const bare = orcidShape(input);
+  return bare && orcidChecksumValid(bare) ? bare : null;
 }
 
 /** ORCID check digit, ISO 7064 MOD 11-2 (as documented by ORCID). */

@@ -7,6 +7,7 @@ import {
   BrandCrestIcon,
   ChartBarIcon,
   CompassIcon,
+  FileTextIcon,
   InboxIcon,
   InfoIcon,
   LinkIcon,
@@ -107,6 +108,12 @@ export function Layout() {
                   <span>ORCID import</span>
                 </NavLink>
               )}
+              {user.role === 'RESEARCHER' && (
+                <NavLink to="/import/scholar">
+                  <FileTextIcon size={15} />
+                  <span>Scholar import</span>
+                </NavLink>
+              )}
               {user.role !== 'VIEWER' && (
                 <NavLink to="/claims">
                   <InboxIcon size={15} />
@@ -180,7 +187,7 @@ export function Layout() {
             <InfoIcon size={16} />
             <span>
               Your {user.pendingResearcherType.toLowerCase()} access is waiting for an administrator to approve it. Until then you can browse and
-              search, but not add publications.
+              search. Once approved, you can import your Google Scholar list (Scholar import) and add publications.
             </span>
           </div>
         </div>
