@@ -24,6 +24,11 @@ RUN npm prune --omit=dev
 # ---------------------------------------------------------------------------
 FROM node:22-bookworm-slim AS runner
 
+# Apply Debian security updates (e.g. libpam CVE-2025-6020) to the runtime image
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 ENV NODE_ENV=production \
